@@ -7,9 +7,22 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.config import settings
 from app.database import Base, SessionLocal, engine, get_db
-from app.models import Order, OrderItem, Rider, Store, StoreInventory
-from app.schemas import InventoryItemOut, OrderItemOut, OrderOut, RiderOut, StoreOut
+from app.models import Order, OrderEvent, OrderItem, Rider, Store, StoreInventory
+from app.schemas import (
+    InventoryItemOut,
+    OrderCreateIn,
+    OrderItemOut,
+    OrderOut,
+    RestockIn,
+    RiderOut,
+    StoreOut,
+)
 from app.seed import seed_database
+from app.services.inventory import (
+    aggregate_items,
+    reserve_inventory_atomic,
+    restock_inventory_atomic,
+)
 
 
 def serialize_inventory(inv: StoreInventory) -> InventoryItemOut:
@@ -167,3 +180,85 @@ def list_orders(
         query = query.filter(Order.status == status.upper())
     orders = query.order_by(Order.created_at.desc()).all()
     return [serialize_order(o) for o in orders]
+
+
+@app.get("/api/orders/{order_id}", response_model=OrderOut)
+def get_order(order_id: int, db: Session = Depends(get_db)):
+    order = (
+        db.query(Order)
+        .options(
+            joinedload(Order.store),
+            joinedload(Order.rider),
+            joinedload(Order.items).joinedload(OrderItem.product),
+            joinedload(Order.events),
+        )
+        .filter(Order.id == order_id)
+        .first()
+    )
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    return serialize_order(order)
+
+
+@app.post("/api/orders", response_model=OrderOut, status_code=201)
+def create_order(payload: OrderCreateIn, db: Session = Depends(get_db)):
+    store = db.query(Store).filter(Store.id == payload.store_id).first()
+    if not store:
+        raise HTTPException(status_code=404, detail="Store not found")
+
+    raw_items = [(it.product_id, it.quantity) for it in payload.items]
+    ordered_items = aggregate_items(raw_items)
+
+    products_map = reserve_inventory_atomic(db, payload.store_id, ordered_items)
+
+    order = Order(
+        store_id=payload.store_id,
+        customer_name=payload.customer_name.strip(),
+        delivery_lat=payload.delivery_lat,
+        delivery_lng=payload.delivery_lng,
+        status="PLACED",
+        predicted_eta_sec=420,
+        sla_risk_score=0.20,
+    )
+    db.add(order)
+    db.flush()
+
+    for product_id, qty in ordered_items:
+        product = products_map[product_id]
+        db.add(
+            OrderItem(
+                order_id=order.id,
+                product_id=product_id,
+                quantity=qty,
+                unit_price_inr=product.price_inr,
+            )
+        )
+
+    db.add(
+        OrderEvent(
+            order_id=order.id,
+            from_status=None,
+            to_status="PLACED",
+            note="Order placed and inventory reserved",
+        )
+    )
+    db.commit()
+
+    return get_order(order.id, db)
+
+
+@app.post("/api/stores/{store_id}/inventory/{product_id}/restock", response_model=InventoryItemOut)
+def restock_inventory(
+    store_id: int,
+    product_id: int,
+    payload: RestockIn,
+    db: Session = Depends(get_db),
+):
+    inv = restock_inventory_atomic(db, store_id, product_id, payload.quantity)
+    inv_loaded = (
+        db.query(StoreInventory)
+        .options(joinedload(StoreInventory.product))
+        .filter(StoreInventory.id == inv.id)
+        .first()
+    )
+    return serialize_inventory(inv_loaded)
