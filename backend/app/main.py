@@ -6,9 +6,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session, joinedload
 
 from app.config import settings
-from app.database import Base, engine, get_db
+from app.database import Base, SessionLocal, engine, get_db
 from app.models import Order, OrderItem, Rider, Store, StoreInventory
 from app.schemas import InventoryItemOut, OrderItemOut, OrderOut, RiderOut, StoreOut
+from app.seed import seed_database
 
 
 def serialize_inventory(inv: StoreInventory) -> InventoryItemOut:
@@ -65,6 +66,11 @@ def serialize_order(order: Order) -> OrderOut:
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     Base.metadata.create_all(bind=engine)
+    db = SessionLocal()
+    try:
+        seed_database(db)
+    finally:
+        db.close()
     yield
 
 
