@@ -13,6 +13,7 @@ from app.schemas import (
     OrderCreateIn,
     OrderItemOut,
     OrderOut,
+    OrderStatusUpdateIn,
     RestockIn,
     RiderOut,
     StoreOut,
@@ -23,6 +24,7 @@ from app.services.inventory import (
     reserve_inventory_atomic,
     restock_inventory_atomic,
 )
+from app.services.state_machine import transition_order_status
 
 
 def serialize_inventory(inv: StoreInventory) -> InventoryItemOut:
@@ -262,3 +264,88 @@ def restock_inventory(
         .first()
     )
     return serialize_inventory(inv_loaded)
+
+
+@app.patch("/api/orders/{order_id}/status", response_model=OrderOut)
+def update_order_status(
+    order_id: int,
+    payload: OrderStatusUpdateIn,
+    db: Session = Depends(get_db),
+):
+    transition_order_status(db, order_id, payload.status, payload.note)
+    return get_order(order_id, db)
+
+
+@app.get("/api/analytics")
+def get_analytics(store_id: Optional[int] = None, db: Session = Depends(get_db)):
+    query = db.query(Order).options(
+        joinedload(Order.items).joinedload(OrderItem.product),
+        joinedload(Order.events),
+    )
+    if store_id is not None:
+        query = query.filter(Order.store_id == store_id)
+    orders = query.all()
+
+    total_orders = len(orders)
+    delivered_orders = [o for o in orders if o.status == "DELIVERED"]
+    cancelled_orders = [o for o in orders if o.status == "CANCELLED"]
+    active_orders = [o for o in orders if o.status not in {"DELIVERED", "CANCELLED"}]
+
+    sla_met = 0
+    pick_durations = []
+    pack_durations = []
+    delivery_durations = []
+    total_durations = []
+    category_counts: dict[str, int] = {}
+
+    for o in orders:
+        for item in o.items:
+            cat = item.product.category
+            category_counts[cat] = category_counts.get(cat, 0) + item.quantity
+
+        event_times = {}
+        for ev in o.events:
+            if ev.to_status not in event_times:
+                event_times[ev.to_status] = ev.timestamp
+
+        if "PICKING" in event_times and "PACKED" in event_times:
+            pick_sec = (event_times["PACKED"] - event_times["PICKING"]).total_seconds()
+            if pick_sec >= 0:
+                pick_durations.append(pick_sec)
+        if "PACKED" in event_times and "OUT_FOR_DELIVERY" in event_times:
+            pack_sec = (event_times["OUT_FOR_DELIVERY"] - event_times["PACKED"]).total_seconds()
+            if pack_sec >= 0:
+                pack_durations.append(pack_sec)
+        if "OUT_FOR_DELIVERY" in event_times and "DELIVERED" in event_times:
+            del_sec = (event_times["DELIVERED"] - event_times["OUT_FOR_DELIVERY"]).total_seconds()
+            if del_sec >= 0:
+                delivery_durations.append(del_sec)
+        if "PLACED" in event_times and "DELIVERED" in event_times:
+            tot_sec = (event_times["DELIVERED"] - event_times["PLACED"]).total_seconds()
+            if tot_sec >= 0:
+                total_durations.append(tot_sec)
+                if tot_sec <= 600:
+                    sla_met += 1
+
+    delivered_count = len(delivered_orders)
+    sla_compliance_pct = (
+        round((sla_met / len(total_durations)) * 100, 1) if total_durations else 100.0
+    )
+
+    return {
+        "total_orders": total_orders,
+        "active_orders": len(active_orders),
+        "delivered_orders": delivered_count,
+        "cancelled_orders": len(cancelled_orders),
+        "sla_compliance_pct": sla_compliance_pct,
+        "sla_met_count": sla_met,
+        "sla_breached_count": max(0, len(total_durations) - sla_met),
+        "avg_pick_time_sec": round(sum(pick_durations) / len(pick_durations), 1) if pick_durations else 0.0,
+        "avg_dispatch_wait_sec": round(sum(pack_durations) / len(pack_durations), 1) if pack_durations else 0.0,
+        "avg_delivery_time_sec": round(sum(delivery_durations) / len(delivery_durations), 1) if delivery_durations else 0.0,
+        "avg_total_fulfillment_sec": round(sum(total_durations) / len(total_durations), 1) if total_durations else 0.0,
+        "category_volume": [
+            {"category": k, "units": v}
+            for k, v in sorted(category_counts.items(), key=lambda x: x[1], reverse=True)
+        ],
+    }
