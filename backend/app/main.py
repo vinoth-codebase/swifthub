@@ -1,7 +1,7 @@
 from contextlib import asynccontextmanager
 from typing import List, Optional
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session, joinedload
 
@@ -25,6 +25,7 @@ from app.services.inventory import (
     restock_inventory_atomic,
 )
 from app.services.state_machine import transition_order_status
+from app.ws import ws_manager
 
 
 def serialize_inventory(inv: StoreInventory) -> InventoryItemOut:
@@ -203,7 +204,7 @@ def get_order(order_id: int, db: Session = Depends(get_db)):
 
 
 @app.post("/api/orders", response_model=OrderOut, status_code=201)
-def create_order(payload: OrderCreateIn, db: Session = Depends(get_db)):
+async def create_order(payload: OrderCreateIn, db: Session = Depends(get_db)):
     store = db.query(Store).filter(Store.id == payload.store_id).first()
     if not store:
         raise HTTPException(status_code=404, detail="Store not found")
@@ -246,11 +247,14 @@ def create_order(payload: OrderCreateIn, db: Session = Depends(get_db)):
     )
     db.commit()
 
-    return get_order(order.id, db)
+    order_out = get_order(order.id, db)
+    await ws_manager.broadcast("ORDER_CREATED", order_out.model_dump(mode="json"))
+    await ws_manager.broadcast("INVENTORY_UPDATED", {"store_id": payload.store_id})
+    return order_out
 
 
 @app.post("/api/stores/{store_id}/inventory/{product_id}/restock", response_model=InventoryItemOut)
-def restock_inventory(
+async def restock_inventory(
     store_id: int,
     product_id: int,
     payload: RestockIn,
@@ -263,17 +267,35 @@ def restock_inventory(
         .filter(StoreInventory.id == inv.id)
         .first()
     )
-    return serialize_inventory(inv_loaded)
+    inv_out = serialize_inventory(inv_loaded)
+    await ws_manager.broadcast("INVENTORY_UPDATED", {"store_id": store_id, "item": inv_out.model_dump(mode="json")})
+    return inv_out
 
 
 @app.patch("/api/orders/{order_id}/status", response_model=OrderOut)
-def update_order_status(
+async def update_order_status(
     order_id: int,
     payload: OrderStatusUpdateIn,
     db: Session = Depends(get_db),
 ):
     transition_order_status(db, order_id, payload.status, payload.note)
-    return get_order(order_id, db)
+    order_out = get_order(order_id, db)
+    await ws_manager.broadcast("ORDER_UPDATED", order_out.model_dump(mode="json"))
+    if order_out.status == "CANCELLED":
+        await ws_manager.broadcast("INVENTORY_UPDATED", {"store_id": order_out.store_id})
+    return order_out
+
+
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    await ws_manager.connect(websocket)
+    try:
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        ws_manager.disconnect(websocket)
+    except Exception:
+        ws_manager.disconnect(websocket)
 
 
 @app.get("/api/analytics")
