@@ -1,0 +1,22 @@
+{
+  "features": [
+    "item_count",
+    "unique_aisles",
+    "active_queue_depth",
+    "idle_riders",
+    "distance_km",
+    "hour_of_day"
+  ],
+  "train_samples": 2000,
+  "test_samples": 500,
+  "eta_regressor": {
+    "algorithm": "GradientBoostingRegressor",
+    "mae_sec": 26.96,
+    "r2": 0.9501
+  },
+  "sla_classifier": {
+    "algorithm": "RandomForestClassifier",
+    "accuracy": 0.912,
+    "roc_auc": 0.976
+  }
+}
