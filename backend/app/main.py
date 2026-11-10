@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import asynccontextmanager
 from typing import List, Optional
 
@@ -16,6 +17,7 @@ from app.schemas import (
     OrderStatusUpdateIn,
     RestockIn,
     RiderOut,
+    SimulationTriggerIn,
     StoreOut,
 )
 from app.seed import seed_database
@@ -25,6 +27,7 @@ from app.services.inventory import (
     restock_inventory_atomic,
 )
 from app.services.ml_inference import haversine_km, sla_predictor
+from app.services.simulator import create_simulated_order, run_order_lifecycle_simulation
 from app.services.state_machine import transition_order_status
 from app.ws import ws_manager
 
@@ -332,6 +335,30 @@ async def update_order_status(
         )
     if order_out.status == "CANCELLED":
         await ws_manager.broadcast("INVENTORY_UPDATED", {"store_id": order_out.store_id})
+    return order_out
+
+
+@app.post("/api/simulation/trigger", response_model=OrderOut, status_code=201)
+async def trigger_simulation(
+    payload: Optional[SimulationTriggerIn] = None,
+    db: Session = Depends(get_db),
+):
+    store_id = payload.store_id if payload else None
+    try:
+        order = create_simulated_order(db, store_id=store_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    order_out = get_order(order.id, db)
+    await ws_manager.broadcast("ORDER_CREATED", order_out.model_dump(mode="json"))
+    await ws_manager.broadcast("INVENTORY_UPDATED", {"store_id": order_out.store_id})
+
+    asyncio.create_task(
+        run_order_lifecycle_simulation(
+            order.id,
+            lambda o: serialize_order(o).model_dump(mode="json"),
+        )
+    )
     return order_out
 
 
