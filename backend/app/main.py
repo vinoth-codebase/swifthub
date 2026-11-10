@@ -24,6 +24,7 @@ from app.services.inventory import (
     reserve_inventory_atomic,
     restock_inventory_atomic,
 )
+from app.services.ml_inference import haversine_km, sla_predictor
 from app.services.state_machine import transition_order_status
 from app.ws import ws_manager
 
@@ -82,6 +83,7 @@ def serialize_order(order: Order) -> OrderOut:
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     Base.metadata.create_all(bind=engine)
+    sla_predictor.load()
     db = SessionLocal()
     try:
         seed_database(db)
@@ -108,7 +110,19 @@ app.add_middleware(
 
 @app.get("/api/health")
 def health_check():
-    return {"status": "ok", "service": "swifthub-backend"}
+    return {
+        "status": "ok",
+        "service": "swifthub-backend",
+        "ml_loaded": sla_predictor.eta_model is not None,
+    }
+
+
+@app.get("/api/ml/metrics")
+def get_ml_metrics():
+    return {
+        "loaded": sla_predictor.eta_model is not None and sla_predictor.sla_model is not None,
+        "metrics": sla_predictor.metrics,
+    }
 
 
 @app.get("/api/stores", response_model=List[StoreOut])
@@ -214,14 +228,40 @@ async def create_order(payload: OrderCreateIn, db: Session = Depends(get_db)):
 
     products_map = reserve_inventory_atomic(db, payload.store_id, ordered_items)
 
+    item_count = sum(qty for _, qty in ordered_items)
+    unique_aisles = len({products_map[pid].aisle_code for pid, _ in ordered_items})
+    active_queue_depth = (
+        db.query(Order)
+        .filter(
+            Order.store_id == payload.store_id,
+            Order.status.in_(["PLACED", "PICKING", "PACKED"]),
+        )
+        .count()
+    )
+    idle_riders = (
+        db.query(Rider)
+        .filter(Rider.store_id == payload.store_id, Rider.status == "IDLE")
+        .count()
+    )
+    distance_km = haversine_km(
+        store.lat, store.lng, payload.delivery_lat, payload.delivery_lng
+    )
+    predicted_eta_sec, sla_risk_score = sla_predictor.predict(
+        item_count=item_count,
+        unique_aisles=unique_aisles,
+        active_queue_depth=active_queue_depth,
+        idle_riders=idle_riders,
+        distance_km=distance_km,
+    )
+
     order = Order(
         store_id=payload.store_id,
         customer_name=payload.customer_name.strip(),
         delivery_lat=payload.delivery_lat,
         delivery_lng=payload.delivery_lng,
         status="PLACED",
-        predicted_eta_sec=420,
-        sla_risk_score=0.20,
+        predicted_eta_sec=predicted_eta_sec,
+        sla_risk_score=sla_risk_score,
     )
     db.add(order)
     db.flush()
