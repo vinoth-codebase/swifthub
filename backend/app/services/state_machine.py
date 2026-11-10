@@ -3,6 +3,7 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session, joinedload
 
 from app.models import Order, OrderEvent, OrderItem, Rider
+from app.services.dispatch import assign_nearest_idle_rider
 from app.services.inventory import (
     release_reserved_on_delivery,
     restore_inventory_atomic,
@@ -69,8 +70,15 @@ def transition_order_status(
     validate_transition(previous_status, normalized_target)
 
     order.status = normalized_target
+    assigned_rider_note = ""
 
-    if normalized_target == "CANCELLED":
+    if normalized_target == "PACKED":
+        rider = assign_nearest_idle_rider(db, order)
+        if rider:
+            assigned_rider_note = f" | Auto-assigned rider: {rider.name}"
+        else:
+            assigned_rider_note = " | Waiting for available rider"
+    elif normalized_target == "CANCELLED":
         restore_inventory_atomic(db, order)
         if order.rider_id is not None:
             rider = db.query(Rider).filter(Rider.id == order.rider_id).first()
@@ -78,6 +86,8 @@ def transition_order_status(
                 rider.status = "IDLE"
             order.rider_id = None
     elif normalized_target == "OUT_FOR_DELIVERY":
+        if order.rider_id is None:
+            assign_nearest_idle_rider(db, order)
         if order.rider_id is not None:
             rider = db.query(Rider).filter(Rider.id == order.rider_id).first()
             if rider:
@@ -89,11 +99,12 @@ def transition_order_status(
             if rider:
                 rider.status = "IDLE"
 
+    base_note = note or f"Status updated from {previous_status} to {normalized_target}"
     event = OrderEvent(
         order_id=order.id,
         from_status=previous_status,
         to_status=normalized_target,
-        note=note or f"Status updated from {previous_status} to {normalized_target}",
+        note=f"{base_note}{assigned_rider_note}",
     )
     db.add(event)
     db.commit()

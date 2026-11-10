@@ -321,6 +321,15 @@ async def update_order_status(
     transition_order_status(db, order_id, payload.status, payload.note)
     order_out = get_order(order_id, db)
     await ws_manager.broadcast("ORDER_UPDATED", order_out.model_dump(mode="json"))
+    if order_out.rider_id is not None or order_out.status in {"PACKED", "OUT_FOR_DELIVERY", "DELIVERED", "CANCELLED"}:
+        riders = db.query(Rider).filter(Rider.store_id == order_out.store_id).all()
+        await ws_manager.broadcast(
+            "RIDERS_UPDATED",
+            {
+                "store_id": order_out.store_id,
+                "riders": [RiderOut.model_validate(r).model_dump(mode="json") for r in riders],
+            },
+        )
     if order_out.status == "CANCELLED":
         await ws_manager.broadcast("INVENTORY_UPDATED", {"store_id": order_out.store_id})
     return order_out
