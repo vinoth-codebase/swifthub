@@ -12,6 +12,7 @@ import {
 import { useHubStore } from './stores/hubStore'
 import { useWebSocket } from './composables/useWebSocket'
 import CustomerStorefront from './components/CustomerStorefront.vue'
+import CartDrawer from './components/CartDrawer.vue'
 
 const hubStore = useHubStore()
 const activeTab = ref('storefront')
@@ -104,6 +105,8 @@ onUnmounted(() => {
         View module initializing...
       </div>
     </main>
+
+    <CartDrawer />
 
     <footer class="bg-white border-t border-[#E2E8F0] py-4 mt-8">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-[#475569]">
