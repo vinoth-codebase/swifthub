@@ -18,6 +18,7 @@ import {
 import { useHubStore } from '../stores/hubStore'
 import { useCartStore } from '../stores/cartStore'
 import { formatCurrencyInr } from '../utils/sla'
+import LiveOrderTracker from './LiveOrderTracker.vue'
 
 const hubStore = useHubStore()
 const cartStore = useCartStore()
@@ -116,6 +117,9 @@ async function onHubChange(event) {
         </button>
       </div>
     </div>
+
+    <!-- Live Order Tracker -->
+    <LiveOrderTracker />
 
     <!-- Search & Category Filters -->
     <div class="flex flex-col md:flex-row gap-3 md:items-center md:justify-between">
