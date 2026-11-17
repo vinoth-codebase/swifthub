@@ -5,11 +5,11 @@ import {
   CheckCircle2,
   Circle,
   Bike,
-  AlertTriangle,
   XCircle,
   Activity,
 } from 'lucide-vue-next'
 import { useHubStore } from '../stores/hubStore'
+import LiveDispatchMap from './LiveDispatchMap.vue'
 import {
   ORDER_STEPS,
   formatCountdown,
@@ -231,14 +231,14 @@ async function handleCancel() {
         </div>
       </div>
 
-      <!-- Right: Map Slot -->
+      <!-- Right: Live Leaflet Dispatch Map -->
       <div class="lg:col-span-2">
-        <slot name="map" :order="activeOrder">
-          <div class="h-full min-h-[240px] rounded-xl border border-dashed border-[#E2E8F0] bg-[#F8FAFC] flex items-center justify-center text-xs text-[#475569]">
-            <AlertTriangle class="w-4 h-4 mr-1.5 text-slate-400" />
-            <span>Live dispatch map loading...</span>
-          </div>
-        </slot>
+        <LiveDispatchMap
+          :store="hubStore.currentStore"
+          :order="activeOrder"
+          :riders="hubStore.riders"
+          height-class="h-72"
+        />
       </div>
     </div>
   </section>
