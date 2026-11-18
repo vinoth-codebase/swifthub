@@ -13,6 +13,7 @@ import { useHubStore } from './stores/hubStore'
 import { useWebSocket } from './composables/useWebSocket'
 import CustomerStorefront from './components/CustomerStorefront.vue'
 import CartDrawer from './components/CartDrawer.vue'
+import OpsConsole from './components/OpsConsole.vue'
 
 const hubStore = useHubStore()
 const activeTab = ref('storefront')
@@ -98,6 +99,7 @@ onUnmounted(() => {
       </div>
 
       <CustomerStorefront v-if="activeTab === 'storefront'" />
+      <OpsConsole v-else-if="activeTab === 'ops'" />
       <div
         v-else
         class="bg-white border border-[#E2E8F0] rounded-xl p-8 text-center text-sm text-[#475569]"
