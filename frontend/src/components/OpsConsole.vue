@@ -10,6 +10,7 @@ import {
   AlertTriangle,
 } from 'lucide-vue-next'
 import { useHubStore } from '../stores/hubStore'
+import LowStockPanel from './LowStockPanel.vue'
 import {
   formatCountdown,
   formatDuration,
@@ -234,9 +235,9 @@ async function advanceOrder(order) {
         </article>
       </div>
 
-      <!-- Right Sidebar Slot for Low-Stock Reorder Alerts -->
+      <!-- Right Sidebar: Low-Stock Reorder Alerts -->
       <div class="space-y-4">
-        <slot name="sidebar" />
+        <LowStockPanel />
       </div>
     </div>
   </div>
