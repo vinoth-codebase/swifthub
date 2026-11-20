@@ -15,6 +15,7 @@ import CustomerStorefront from './components/CustomerStorefront.vue'
 import CartDrawer from './components/CartDrawer.vue'
 import OpsConsole from './components/OpsConsole.vue'
 import RiderDispatchPanel from './components/RiderDispatchPanel.vue'
+import AnalyticsDashboard from './components/AnalyticsDashboard.vue'
 
 const hubStore = useHubStore()
 const activeTab = ref('storefront')
@@ -105,12 +106,7 @@ onUnmounted(() => {
         v-else-if="activeTab === 'riders'"
         @track-order="activeTab = 'storefront'"
       />
-      <div
-        v-else
-        class="bg-white border border-[#E2E8F0] rounded-xl p-8 text-center text-sm text-[#475569]"
-      >
-        View module initializing...
-      </div>
+      <AnalyticsDashboard v-else-if="activeTab === 'analytics'" />
     </main>
 
     <CartDrawer />
