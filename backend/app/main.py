@@ -101,10 +101,13 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-origins = [o.strip() for o in settings.FRONTEND_URL.split(",") if o.strip()]
+origins = [o.strip().rstrip("/") for o in settings.FRONTEND_URL.split(",") if o.strip()]
+default_dev_origins = ["http://localhost:5173", "http://127.0.0.1:5173"]
+allowed_origins = list(dict.fromkeys(origins + default_dev_origins))
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins or ["*"],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

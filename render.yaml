@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: swifthub-backend
+    runtime: python
+    rootDir: backend
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.9
+      - key: DATABASE_URL
+        value: sqlite:///./swifthub.db
+      - key: FRONTEND_URL
+        sync: false
