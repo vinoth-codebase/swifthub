@@ -114,9 +114,9 @@ onUnmounted(() => {
     <footer class="bg-white border-t border-[#E2E8F0] py-4 mt-8">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-[#475569]">
         <p>
-          SwiftHub is a non-commercial technical portfolio project using simulated operational data.
+          Disclaimer: SwiftHub is a non-commercial technical portfolio project using simulated operational data and synthetic telemetry.
         </p>
-        <p>Bangalore Dark-Store Dispatch Engine</p>
+        <p class="font-medium text-[#0F172A]">SwiftHub Dark-Store Dispatch Engine</p>
       </div>
     </footer>
   </div>
