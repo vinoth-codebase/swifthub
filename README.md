@@ -177,4 +177,4 @@ cd frontend && npm test
 ## Production Deployment (Render + Vercel)
 
 - **Frontend (Vercel):** Deployed at [https://swifthub-rho.vercel.app/](https://swifthub-rho.vercel.app/) from Root Directory `frontend` using `frontend/vercel.json`, with `VITE_API_URL` pointing to the Render backend (WebSocket `wss://` is derived automatically).
-- **Backend (Render):** Deployed from Root Directory `backend` with health check `/api/health`, `JWT_SECRET_KEY`, and `FRONTEND_URL=https://swifthub-rho.vercel.app`.
+- **Backend (Render — Docker):** Deployed at [https://swifthub-jfte.onrender.com](https://swifthub-jfte.onrender.com) (API docs: [https://swifthub-jfte.onrender.com/docs](https://swifthub-jfte.onrender.com/docs)) from Root Directory `backend` using `backend/Dockerfile`, with health check `/api/health`, `JWT_SECRET_KEY`, and `FRONTEND_URL=https://swifthub-rho.vercel.app`.
