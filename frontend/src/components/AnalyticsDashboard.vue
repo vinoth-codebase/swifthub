@@ -76,7 +76,7 @@ function renderCharts() {
               data.avg_dispatch_wait_sec || 0,
               data.avg_delivery_time_sec || 0,
             ],
-            backgroundColor: ['#1E3A8A', '#64748B', '#1D4ED8'],
+            backgroundColor: ['#5B21B6', '#64748B', '#7C3AED'],
             borderRadius: 6,
             barThickness: 38,
           },
@@ -113,7 +113,7 @@ function renderCharts() {
           {
             label: 'Units Ordered',
             data: categories.map((c) => c.units),
-            backgroundColor: '#1E3A8A',
+            backgroundColor: '#5B21B6',
             borderRadius: 6,
             barThickness: 22,
           },
@@ -165,27 +165,27 @@ onUnmounted(() => {
 <template>
   <div class="space-y-6">
     <!-- Header -->
-    <div class="bg-white border border-[#E2E8F0] rounded-xl p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div class="bg-white border border-[#E9E5F5] rounded-xl p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
       <div class="flex items-start gap-3">
-        <div class="w-10 h-10 rounded-lg bg-[#EFF6FF] text-[#1E3A8A] flex items-center justify-center shrink-0">
+        <div class="w-10 h-10 rounded-lg bg-[#EDE9FE] text-[#5B21B6] flex items-center justify-center shrink-0">
           <BarChart3 class="w-5 h-5" />
         </div>
         <div>
-          <h1 class="text-lg font-semibold text-[#0F172A]">Operations Analytics Dashboard</h1>
+          <h1 class="text-lg font-semibold text-[#1E1B4B]">Operations Analytics Dashboard</h1>
           <p class="text-sm text-[#475569] mt-0.5">
             Real-time SLA compliance, picking latency, and category throughput derived from append-only order events.
           </p>
         </div>
       </div>
 
-      <span class="text-xs font-medium px-3 py-1.5 rounded-lg bg-[#F8FAFC] border border-[#E2E8F0] text-[#0F172A]">
+      <span class="text-xs font-medium px-3 py-1.5 rounded-lg bg-[#FAF8FF] border border-[#E9E5F5] text-[#0F172A]">
         Hub: {{ hubStore.currentStore?.name || 'All Hubs' }}
       </span>
     </div>
 
     <!-- KPI Grid -->
     <div v-if="hubStore.analytics" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-      <div class="bg-white border border-[#E2E8F0] rounded-xl p-4">
+      <div class="bg-white border border-[#E9E5F5] rounded-xl p-4">
         <div class="flex items-center justify-between text-xs font-medium text-[#475569]">
           <span>10-Min SLA Compliance</span>
           <CheckCircle2 class="w-4 h-4 text-emerald-600" />
@@ -198,10 +198,10 @@ onUnmounted(() => {
         </p>
       </div>
 
-      <div class="bg-white border border-[#E2E8F0] rounded-xl p-4">
+      <div class="bg-white border border-[#E9E5F5] rounded-xl p-4">
         <div class="flex items-center justify-between text-xs font-medium text-[#475569]">
           <span>Avg Fulfillment Time</span>
-          <Clock class="w-4 h-4 text-[#1E3A8A]" />
+          <Clock class="w-4 h-4 text-[#5B21B6]" />
         </div>
         <p class="text-2xl font-bold text-[#0F172A] mt-2">
           {{ formatDuration(hubStore.analytics.avg_total_fulfillment_sec) }}
@@ -211,10 +211,10 @@ onUnmounted(() => {
         </p>
       </div>
 
-      <div class="bg-white border border-[#E2E8F0] rounded-xl p-4">
+      <div class="bg-white border border-[#E9E5F5] rounded-xl p-4">
         <div class="flex items-center justify-between text-xs font-medium text-[#475569]">
           <span>Avg Picking Duration</span>
-          <Timer class="w-4 h-4 text-[#1D4ED8]" />
+          <Timer class="w-4 h-4 text-[#7C3AED]" />
         </div>
         <p class="text-2xl font-bold text-[#0F172A] mt-2">
           {{ formatDuration(hubStore.analytics.avg_pick_time_sec) }}
@@ -224,7 +224,7 @@ onUnmounted(() => {
         </p>
       </div>
 
-      <div class="bg-white border border-[#E2E8F0] rounded-xl p-4">
+      <div class="bg-white border border-[#E9E5F5] rounded-xl p-4">
         <div class="flex items-center justify-between text-xs font-medium text-[#475569]">
           <span>Avg Last-Mile Delivery</span>
           <Truck class="w-4 h-4 text-amber-600" />
@@ -240,24 +240,24 @@ onUnmounted(() => {
 
     <!-- Charts Grid -->
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      <div class="bg-white border border-[#E2E8F0] rounded-xl p-5 flex flex-col">
-        <h2 class="text-sm font-semibold text-[#0F172A]">SLA Compliance Breakdown</h2>
+      <div class="bg-white border border-[#E9E5F5] rounded-xl p-5 flex flex-col">
+        <h2 class="text-sm font-semibold text-[#1E1B4B]">SLA Compliance Breakdown</h2>
         <p class="text-xs text-[#475569] mb-4">Orders delivered within 600s target</p>
         <div class="h-60 relative">
           <canvas ref="slaCanvas" />
         </div>
       </div>
 
-      <div class="bg-white border border-[#E2E8F0] rounded-xl p-5 flex flex-col">
-        <h2 class="text-sm font-semibold text-[#0F172A]">Picking vs. Delivery Latency</h2>
+      <div class="bg-white border border-[#E9E5F5] rounded-xl p-5 flex flex-col">
+        <h2 class="text-sm font-semibold text-[#1E1B4B]">Picking vs. Delivery Latency</h2>
         <p class="text-xs text-[#475569] mb-4">Average stage duration in seconds</p>
         <div class="h-60 relative">
           <canvas ref="latencyCanvas" />
         </div>
       </div>
 
-      <div class="bg-white border border-[#E2E8F0] rounded-xl p-5 flex flex-col">
-        <h2 class="text-sm font-semibold text-[#0F172A]">Order Volume by Category</h2>
+      <div class="bg-white border border-[#E9E5F5] rounded-xl p-5 flex flex-col">
+        <h2 class="text-sm font-semibold text-[#1E1B4B]">Order Volume by Category</h2>
         <p class="text-xs text-[#475569] mb-4">Total units picked across hub aisles</p>
         <div class="h-60 relative">
           <canvas ref="categoryCanvas" />

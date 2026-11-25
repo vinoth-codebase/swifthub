@@ -33,7 +33,7 @@ function renderLayers() {
     const hubLatLng = [props.store.lat, props.store.lng]
     points.push(hubLatLng)
     L.marker(hubLatLng, {
-      icon: makeBadgeIcon('HUB', '#1E3A8A'),
+      icon: makeBadgeIcon('HUB', '#5B21B6'),
     })
       .bindPopup(`<strong>${props.store.name}</strong><br/>Dark-Store Dispatch Hub`)
       .addTo(layerGroup)
@@ -55,7 +55,7 @@ function renderLayers() {
           custLatLng,
         ],
         {
-          color: '#1D4ED8',
+          color: '#7C3AED',
           weight: 3,
           opacity: 0.65,
           dashArray: '6, 8',
@@ -65,13 +65,17 @@ function renderLayers() {
 
     if (props.order.rider_id) {
       const assigned = props.riders.find((r) => r.id === props.order.rider_id)
-      if (assigned) {
-        const riderLatLng = [assigned.current_lat, assigned.current_lng]
+      const riderLat = assigned ? assigned.current_lat : props.order.rider_lat
+      const riderLng = assigned ? assigned.current_lng : props.order.rider_lng
+      const riderName = assigned ? assigned.name : props.order.rider_name
+      const riderStatus = assigned ? assigned.status : props.order.rider_status || 'ASSIGNED'
+      if (riderLat != null && riderLng != null && riderName) {
+        const riderLatLng = [riderLat, riderLng]
         points.push(riderLatLng)
         L.marker(riderLatLng, {
-          icon: makeBadgeIcon(`RIDER: ${assigned.name.split(' ')[0]}`, '#D97706'),
+          icon: makeBadgeIcon(`RIDER: ${riderName.split(' ')[0]}`, '#D97706'),
         })
-          .bindPopup(`<strong>${assigned.name}</strong><br/>Status: ${assigned.status}`)
+          .bindPopup(`<strong>${riderName}</strong><br/>Status: ${riderStatus}`)
           .addTo(layerGroup)
       }
     }
@@ -82,7 +86,7 @@ function renderLayers() {
       points.push(riderLatLng)
       const bg =
         rider.status === 'DELIVERING'
-          ? '#1D4ED8'
+          ? '#6D28D9'
           : rider.status === 'ASSIGNED'
             ? '#D97706'
             : '#475569'
@@ -112,8 +116,8 @@ onMounted(() => {
     zoomControl: true,
   })
 
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-    attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; OpenStreetMap contributors',
     maxZoom: 19,
   }).addTo(map)
 
@@ -146,11 +150,11 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="relative rounded-xl overflow-hidden border border-[#E2E8F0] bg-[#F8FAFC]">
+  <div class="relative rounded-xl overflow-hidden border border-[#E9E5F5] bg-[#FAF8FF]">
     <div ref="mapContainer" class="w-full" :class="heightClass" />
-    <div class="absolute bottom-2.5 left-2.5 z-[400] bg-white/95 backdrop-blur-sm border border-[#E2E8F0] rounded-lg px-2.5 py-1.5 flex items-center gap-3 text-[11px] font-medium text-[#475569] shadow-sm">
+    <div class="absolute bottom-2.5 left-2.5 z-[400] bg-white/95 backdrop-blur-sm border border-[#E9E5F5] rounded-lg px-2.5 py-1.5 flex items-center gap-3 text-[11px] font-medium text-[#475569] shadow-sm">
       <span class="inline-flex items-center gap-1">
-        <span class="w-2.5 h-2.5 rounded-full bg-[#1E3A8A]" />
+        <span class="w-2.5 h-2.5 rounded-full bg-[#5B21B6]" />
         Hub
       </span>
       <span v-if="order" class="inline-flex items-center gap-1">

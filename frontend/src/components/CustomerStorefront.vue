@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, reactive, ref } from 'vue'
 import {
   Search,
   MapPin,
@@ -8,34 +8,22 @@ import {
   ShoppingBag,
   AlertTriangle,
   Package,
-  Milk,
-  Croissant,
-  Leaf,
-  Cookie,
-  Coffee,
-  Boxes,
 } from 'lucide-vue-next'
+import { useAuthStore } from '../stores/authStore'
 import { useHubStore } from '../stores/hubStore'
 import { useCartStore } from '../stores/cartStore'
 import { formatCurrencyInr } from '../utils/sla'
 import LiveOrderTracker from './LiveOrderTracker.vue'
 
+const authStore = useAuthStore()
 const hubStore = useHubStore()
 const cartStore = useCartStore()
 
 const searchQuery = ref('')
 const selectedCategory = ref('All')
+const failedImages = reactive({})
 
 const categories = ['All', 'Dairy', 'Bakery', 'Produce', 'Snacks', 'Beverages', 'Pantry']
-
-const categoryIconMap = {
-  Dairy: Milk,
-  Bakery: Croissant,
-  Produce: Leaf,
-  Snacks: Cookie,
-  Beverages: Coffee,
-  Pantry: Boxes,
-}
 
 const filteredInventory = computed(() => {
   return hubStore.inventory.filter((item) => {
@@ -45,8 +33,7 @@ const filteredInventory = computed(() => {
     const matchSearch =
       !term ||
       item.name.toLowerCase().includes(term) ||
-      item.sku.toLowerCase().includes(term) ||
-      item.aisle_code.toLowerCase().includes(term)
+      item.category.toLowerCase().includes(term)
     return matchCategory && matchSearch
   })
 })
@@ -56,8 +43,13 @@ function getCartQty(productId) {
   return found ? found.quantity : 0
 }
 
-function getCategoryIcon(category) {
-  return categoryIconMap[category] || Package
+function getEncodedImageUrl(url) {
+  if (!url) return ''
+  return encodeURI(url)
+}
+
+function onImageError(itemId) {
+  failedImages[itemId] = true
 }
 
 async function onHubChange(event) {
@@ -67,36 +59,32 @@ async function onHubChange(event) {
 </script>
 
 <template>
-  <div class="space-y-6">
+  <div class="space-y-5">
     <!-- Hub Selector & Summary Banner -->
-    <div class="bg-white border border-[#E2E8F0] rounded-xl p-5 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div class="relative overflow-hidden bg-white border border-[#E9E5F5] rounded-xl p-5 flex flex-col md:flex-row md:items-center md:justify-between gap-4 shadow-sm">
+      <div class="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-[#4C1D95] via-[#6D28D9] to-[#A21CAF]" />
       <div class="flex items-start gap-3">
-        <div class="w-10 h-10 rounded-lg bg-[#EFF6FF] text-[#1E3A8A] flex items-center justify-center shrink-0">
+        <div class="w-10 h-10 rounded-lg bg-[#EDE9FE] text-[#5B21B6] flex items-center justify-center shrink-0">
           <MapPin class="w-5 h-5" />
         </div>
         <div>
-          <div class="flex items-center gap-2 flex-wrap">
-            <h1 class="text-lg font-semibold text-[#0F172A]">Hyperlocal Dark-Store Storefront</h1>
-            <span class="text-xs font-medium px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-              10-Min SLA Target
-            </span>
-          </div>
+          <h1 class="text-lg font-bold text-[#1E1B4B]">Swift the groceries in minutes</h1>
           <p class="text-sm text-[#475569] mt-0.5">
-            Live inventory synced over WebSockets with atomic checkout reservation.
+            Fresh essentials delivered from your nearest Bangalore hub.
           </p>
         </div>
       </div>
 
       <div class="flex items-center gap-3 flex-wrap">
         <label class="flex items-center gap-2 text-sm text-[#475569]">
-          <span class="font-medium text-[#0F172A]">Active Hub:</span>
+          <span class="font-medium text-[#1E1B4B]">Delivery Hub:</span>
           <select
             :value="hubStore.selectedStoreId"
             @change="onHubChange"
-            class="bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg px-3 py-2 text-sm font-medium text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-[#1D4ED8]"
+            class="bg-[#FAF8FF] border border-[#E9E5F5] rounded-lg px-3 py-2 text-sm font-medium text-[#1E1B4B] focus:outline-none focus:ring-2 focus:ring-[#7C3AED]"
           >
             <option v-for="store in hubStore.stores" :key="store.id" :value="store.id">
-              {{ store.name }} ({{ store.active_pickers }} pickers)
+              {{ store.name }}
             </option>
           </select>
         </label>
@@ -104,13 +92,13 @@ async function onHubChange(event) {
         <button
           type="button"
           @click="cartStore.openDrawer()"
-          class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[#1E3A8A] hover:bg-[#1D4ED8] text-white text-sm font-medium transition-colors"
+          class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[#5B21B6] hover:bg-[#4C1D95] text-white text-sm font-medium transition-colors shadow-sm"
         >
           <ShoppingBag class="w-4 h-4" />
           <span>Cart</span>
           <span
             v-if="cartStore.itemCount > 0"
-            class="ml-0.5 px-1.5 py-0.5 text-xs font-semibold rounded-full bg-white text-[#1E3A8A]"
+            class="ml-0.5 px-1.5 py-0.5 text-xs font-semibold rounded-full bg-white text-[#5B21B6]"
           >
             {{ cartStore.itemCount }}
           </span>
@@ -118,8 +106,8 @@ async function onHubChange(event) {
       </div>
     </div>
 
-    <!-- Live Order Tracker -->
-    <LiveOrderTracker />
+    <!-- Live Order Tracker (Authenticated Customers with Orders) -->
+    <LiveOrderTracker v-if="authStore.isCustomer && hubStore.orders.length > 0" />
 
     <!-- Search & Category Filters -->
     <div class="flex flex-col md:flex-row gap-3 md:items-center md:justify-between">
@@ -132,8 +120,8 @@ async function onHubChange(event) {
           class="px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors whitespace-nowrap"
           :class="
             selectedCategory === cat
-              ? 'bg-[#1E3A8A] text-white border-[#1E3A8A]'
-              : 'bg-white text-[#475569] border-[#E2E8F0] hover:bg-slate-50 hover:text-[#0F172A]'
+              ? 'bg-[#5B21B6] text-white border-[#5B21B6]'
+              : 'bg-white text-[#475569] border-[#E9E5F5] hover:bg-[#F5F3FF] hover:text-[#1E1B4B]'
           "
         >
           {{ cat }}
@@ -145,90 +133,93 @@ async function onHubChange(event) {
         <input
           v-model="searchQuery"
           type="text"
-          placeholder="Search SKU, item, or aisle..."
-          class="w-full pl-9 pr-3 py-2 bg-white border border-[#E2E8F0] rounded-lg text-sm text-[#0F172A] placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#1D4ED8]"
+          placeholder="Search groceries, milk, snacks..."
+          class="w-full pl-9 pr-3 py-2 bg-white border border-[#E9E5F5] rounded-lg text-sm text-[#0F172A] placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#7C3AED]"
         />
       </div>
     </div>
 
-    <!-- Product Grid -->
-    <div v-if="filteredInventory.length === 0" class="bg-white border border-[#E2E8F0] rounded-xl p-10 text-center text-sm text-[#475569]">
+    <!-- Product Grid (Compact 5-Column Quick-Commerce Layout) -->
+    <div
+      v-if="filteredInventory.length === 0"
+      class="bg-white border border-[#E9E5F5] rounded-xl p-10 text-center text-sm text-[#475569]"
+    >
       No products match the current filter.
     </div>
 
-    <div v-else class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+    <div v-else class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3.5">
       <div
         v-for="item in filteredInventory"
         :key="item.id"
-        class="bg-white border border-[#E2E8F0] rounded-xl p-4 flex flex-col justify-between gap-4 hover:border-slate-300 transition-colors"
+        class="bg-white border border-[#E9E5F5] rounded-xl p-3 flex flex-col justify-between hover:border-[#C4B5FD] hover:shadow-sm transition-all"
       >
-        <div class="space-y-3">
-          <div class="flex items-start justify-between gap-2">
-            <div class="w-10 h-10 rounded-lg bg-[#F8FAFC] border border-[#E2E8F0] text-[#1E3A8A] flex items-center justify-center shrink-0">
-              <component :is="getCategoryIcon(item.category)" class="w-5 h-5" />
+        <div>
+          <!-- Compact Product Image Container with Conditional Stock Badge -->
+          <div class="relative h-32 w-full rounded-lg bg-white border border-[#E9E5F5] overflow-hidden flex items-center justify-center p-2">
+            <img
+              v-if="item.image_url && !failedImages[item.id]"
+              :src="getEncodedImageUrl(item.image_url)"
+              :alt="item.name"
+              loading="lazy"
+              @error="onImageError(item.id)"
+              class="w-full h-full object-contain"
+            />
+            <div v-else class="flex flex-col items-center justify-center text-slate-400 gap-1">
+              <Package class="w-7 h-7" />
+              <span class="text-[11px] font-medium">Product Photo</span>
             </div>
-            <div class="flex items-center gap-1.5 flex-wrap justify-end">
-              <span class="text-xs font-medium px-2 py-0.5 rounded bg-slate-100 text-[#475569]">
-                {{ item.aisle_code }}
-              </span>
-              <span
-                v-if="item.stock_available === 0"
-                class="text-xs font-medium px-2 py-0.5 rounded border bg-rose-50 text-rose-700 border-rose-200"
-              >
-                Out of Stock
-              </span>
-              <span
-                v-else-if="item.stock_available <= item.reorder_threshold"
-                class="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded border bg-amber-50 text-amber-800 border-amber-200"
-              >
-                <AlertTriangle class="w-3 h-3" />
-                Only {{ item.stock_available }} left
-              </span>
-              <span
-                v-else
-                class="text-xs font-medium px-2 py-0.5 rounded border bg-emerald-50 text-emerald-700 border-emerald-200"
-              >
-                {{ item.stock_available }} in stock
-              </span>
-            </div>
+
+            <!-- Conditional Stock Badge: Out of Stock (0) or Low Stock (1..4) ONLY -->
+            <span
+              v-if="item.stock_available === 0"
+              class="absolute top-1.5 right-1.5 text-[11px] font-semibold px-2 py-0.5 rounded-md border bg-rose-50 text-rose-700 border-rose-200 shadow-sm"
+            >
+              Out of Stock
+            </span>
+            <span
+              v-else-if="item.stock_available > 0 && item.stock_available < 5"
+              class="absolute top-1.5 right-1.5 inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-md border bg-amber-50 text-amber-800 border-amber-200 shadow-sm"
+            >
+              <AlertTriangle class="w-3 h-3" />
+              <span>Only {{ item.stock_available }} left</span>
+            </span>
           </div>
 
-          <div>
-            <p class="text-xs font-mono text-[#475569]">{{ item.sku }}</p>
-            <h3 class="text-sm font-semibold text-[#0F172A] mt-0.5 leading-snug">
-              {{ item.name }}
-            </h3>
-          </div>
+          <!-- Compact Product Name -->
+          <h3 class="text-xs sm:text-sm font-semibold text-slate-900 line-clamp-2 min-h-[2.25rem] leading-snug mt-2">
+            {{ item.name }}
+          </h3>
         </div>
 
-        <div class="flex items-center justify-between pt-3 border-t border-[#E2E8F0]">
-          <div>
-            <span class="text-base font-bold text-[#0F172A]">{{ formatCurrencyInr(item.price_inr) }}</span>
-            <p v-if="item.stock_reserved > 0" class="text-[11px] text-[#475569]">
-              {{ item.stock_reserved }} reserved in active orders
-            </p>
-          </div>
+        <!-- Bottom Row: Price + Compact Add / Solid Violet Stepper -->
+        <div class="flex items-center justify-between pt-2.5 mt-2 border-t border-[#E9E5F5]">
+          <span class="text-sm font-bold text-slate-900">
+            {{ formatCurrencyInr(item.price_inr) }}
+          </span>
 
-          <div v-if="getCartQty(item.product_id) > 0" class="inline-flex items-center border border-[#1E3A8A] rounded-lg overflow-hidden">
+          <div
+            v-if="getCartQty(item.product_id) > 0"
+            class="inline-flex items-center bg-[#6D28D9] text-white rounded-lg overflow-hidden shadow-sm"
+          >
             <button
               type="button"
               @click="cartStore.updateQuantity(item.product_id, -1)"
-              class="px-2.5 py-1.5 text-[#1E3A8A] hover:bg-[#EFF6FF] transition-colors"
+              class="px-2 py-1 text-white hover:bg-[#5B21B6] transition-colors"
               aria-label="Decrease quantity"
             >
-              <Minus class="w-3.5 h-3.5" />
+              <Minus class="w-3 h-3" />
             </button>
-            <span class="px-3 py-1.5 text-sm font-semibold text-[#0F172A] bg-white">
+            <span class="px-2 py-1 text-xs font-semibold text-white">
               {{ getCartQty(item.product_id) }}
             </span>
             <button
               type="button"
               @click="cartStore.addItem(item)"
               :disabled="getCartQty(item.product_id) >= item.stock_available"
-              class="px-2.5 py-1.5 text-[#1E3A8A] hover:bg-[#EFF6FF] disabled:opacity-40 transition-colors"
+              class="px-2 py-1 text-white hover:bg-[#5B21B6] disabled:opacity-40 transition-colors"
               aria-label="Increase quantity"
             >
-              <Plus class="w-3.5 h-3.5" />
+              <Plus class="w-3 h-3" />
             </button>
           </div>
 
@@ -237,14 +228,14 @@ async function onHubChange(event) {
             type="button"
             :disabled="item.stock_available === 0"
             @click="cartStore.addItem(item)"
-            class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-sm font-medium border transition-colors"
+            class="inline-flex items-center gap-1 px-3 py-1 text-xs font-semibold rounded-lg border transition-colors"
             :class="
               item.stock_available === 0
-                ? 'bg-slate-100 text-slate-400 border-[#E2E8F0] cursor-not-allowed'
-                : 'bg-white text-[#1E3A8A] border-[#1E3A8A] hover:bg-[#1E3A8A] hover:text-white'
+                ? 'bg-slate-100 text-slate-400 border-[#E9E5F5] cursor-not-allowed'
+                : 'border-[#7C3AED] text-[#6D28D9] bg-[#F5F3FF]/50 hover:bg-[#6D28D9] hover:text-white'
             "
           >
-            <Plus class="w-3.5 h-3.5" />
+            <Plus class="w-3 h-3" />
             <span>Add</span>
           </button>
         </div>

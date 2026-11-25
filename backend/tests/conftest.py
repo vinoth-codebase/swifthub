@@ -5,9 +5,10 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 
+from app.auth import ROLE_BRANCH_ADMIN, ROLE_CUSTOMER, create_access_token, hash_password
 from app.database import Base, get_db
 from app.main import app
-from app.models import Product, Rider, Store, StoreInventory
+from app.models import Product, Rider, Store, StoreInventory, User
 from app.services.ml_inference import sla_predictor
 
 
@@ -41,8 +42,9 @@ def db_session_factory(test_db_engine):
     factory = sessionmaker(autocommit=False, autoflush=False, bind=test_db_engine)
     db = factory()
     try:
-        store = Store(name="Koramangala Hub", lat=12.9352, lng=77.6245, active_pickers=5)
-        db.add(store)
+        hsr = Store(id=1, name="HSR Layout Hub", lat=12.9116, lng=77.6389, active_pickers=5)
+        kora = Store(id=2, name="Koramangala Hub", lat=12.9352, lng=77.6245, active_pickers=6)
+        db.add_all([hsr, kora])
         db.flush()
 
         p1 = Product(
@@ -50,53 +52,66 @@ def db_session_factory(test_db_engine):
             name="Test Milk 500ml",
             category="Dairy",
             aisle_code="A1-Dairy",
-            price_inr=35.0,
+            price_inr=30.0,
+            image_url="/assets/products/Nandhini goodlife toned milk 500 ML.jpeg",
         )
         p2 = Product(
             sku="TST-002",
             name="Test Avocado Single",
             category="Produce",
             aisle_code="A3-Produce",
-            price_inr=160.0,
+            price_inr=165.0,
+            image_url="/assets/products/Hass Avocado Single Piece.jpeg",
         )
         db.add_all([p1, p2])
         db.flush()
 
         db.add_all(
             [
-                StoreInventory(
-                    store_id=store.id,
-                    product_id=p1.id,
-                    stock_available=10,
-                    stock_reserved=0,
-                    reorder_threshold=3,
-                ),
-                StoreInventory(
-                    store_id=store.id,
-                    product_id=p2.id,
-                    stock_available=1,
-                    stock_reserved=0,
-                    reorder_threshold=2,
-                ),
+                StoreInventory(store_id=1, product_id=p1.id, stock_available=10, stock_reserved=0, reorder_threshold=4),
+                StoreInventory(store_id=1, product_id=p2.id, stock_available=1, stock_reserved=0, reorder_threshold=4),
+                StoreInventory(store_id=2, product_id=p1.id, stock_available=12, stock_reserved=0, reorder_threshold=4),
+                StoreInventory(store_id=2, product_id=p2.id, stock_available=3, stock_reserved=0, reorder_threshold=4),
             ]
         )
 
-        # Two riders at different distances from hub to verify nearest-rider assignment
-        r_far = Rider(
-            store_id=store.id,
-            name="Far Rider",
-            status="IDLE",
-            current_lat=12.9500,
-            current_lng=77.6400,
+        # Two riders in HSR (store 1) at different distances to verify nearest-rider assignment
+        r_far = Rider(store_id=1, name="Far Rider", status="IDLE", current_lat=12.9280, current_lng=77.6550)
+        r_near = Rider(store_id=1, name="Near Rider", status="IDLE", current_lat=12.9119, current_lng=77.6392)
+        # One rider in Koramangala (store 2)
+        r_kora = Rider(store_id=2, name="Kora Rider", status="IDLE", current_lat=12.9355, current_lng=77.6248)
+        db.add_all([r_far, r_near, r_kora])
+
+        # Two Branch Admins and two Customers
+        hsr_admin = User(
+            email="hsr.admin@swifthub.com",
+            full_name="HSR Layout Hub Admin",
+            password_hash=hash_password("AdminHSR123!"),
+            role=ROLE_BRANCH_ADMIN,
+            store_id=1,
         )
-        r_near = Rider(
-            store_id=store.id,
-            name="Near Rider",
-            status="IDLE",
-            current_lat=12.9355,
-            current_lng=77.6248,
+        kora_admin = User(
+            email="koramangala.admin@swifthub.com",
+            full_name="Koramangala Hub Admin",
+            password_hash=hash_password("AdminKora123!"),
+            role=ROLE_BRANCH_ADMIN,
+            store_id=2,
         )
-        db.add_all([r_far, r_near])
+        cust1 = User(
+            email="customer1@gmail.com",
+            full_name="Customer One",
+            password_hash=hash_password("Pass1234!"),
+            role=ROLE_CUSTOMER,
+            store_id=None,
+        )
+        cust2 = User(
+            email="customer2@gmail.com",
+            full_name="Customer Two",
+            password_hash=hash_password("Pass1234!"),
+            role=ROLE_CUSTOMER,
+            store_id=None,
+        )
+        db.add_all([hsr_admin, kora_admin, cust1, cust2])
         db.commit()
     finally:
         db.close()
@@ -119,3 +134,33 @@ def client(db_session_factory):
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()
+
+
+def _headers_for_email(db_session_factory, email: str) -> dict:
+    db = db_session_factory()
+    try:
+        user = db.query(User).filter(User.email == email).first()
+        token = create_access_token(user)
+        return {"Authorization": f"Bearer {token}"}
+    finally:
+        db.close()
+
+
+@pytest.fixture()
+def hsr_admin_headers(db_session_factory):
+    return _headers_for_email(db_session_factory, "hsr.admin@swifthub.com")
+
+
+@pytest.fixture()
+def kora_admin_headers(db_session_factory):
+    return _headers_for_email(db_session_factory, "koramangala.admin@swifthub.com")
+
+
+@pytest.fixture()
+def customer1_headers(db_session_factory):
+    return _headers_for_email(db_session_factory, "customer1@gmail.com")
+
+
+@pytest.fixture()
+def customer2_headers(db_session_factory):
+    return _headers_for_email(db_session_factory, "customer2@gmail.com")

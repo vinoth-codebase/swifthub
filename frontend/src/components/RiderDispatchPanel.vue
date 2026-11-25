@@ -25,7 +25,7 @@ function assignedOrderForRider(riderId) {
 }
 
 function statusBadgeClass(status) {
-  if (status === 'DELIVERING') return 'bg-blue-50 text-[#1D4ED8] border-blue-200'
+  if (status === 'DELIVERING') return 'bg-[#F5F3FF] text-[#6D28D9] border-[#DDD6FE]'
   if (status === 'ASSIGNED') return 'bg-amber-50 text-amber-800 border-amber-200'
   return 'bg-emerald-50 text-emerald-700 border-emerald-200'
 }
@@ -46,13 +46,13 @@ function openTracker(orderId) {
 <template>
   <div class="space-y-6">
     <!-- Top Header & Prominent Live Demo Trigger -->
-    <div class="bg-white border border-[#E2E8F0] rounded-xl p-5 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+    <div class="bg-white border border-[#E9E5F5] rounded-xl p-5 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
       <div class="flex items-start gap-3">
-        <div class="w-10 h-10 rounded-lg bg-[#EFF6FF] text-[#1E3A8A] flex items-center justify-center shrink-0">
+        <div class="w-10 h-10 rounded-lg bg-[#EDE9FE] text-[#5B21B6] flex items-center justify-center shrink-0">
           <Bike class="w-5 h-5" />
         </div>
         <div>
-          <h1 class="text-lg font-semibold text-[#0F172A]">Rider Dispatch & Fleet Telemetry</h1>
+          <h1 class="text-lg font-semibold text-[#1E1B4B]">Rider Dispatch & Fleet Telemetry</h1>
           <p class="text-sm text-[#475569] mt-0.5">
             Nearest-rider auto-assignment on pack completion with live WebSocket GPS streaming.
           </p>
@@ -63,7 +63,7 @@ function openTracker(orderId) {
         type="button"
         :disabled="hubStore.simulationRunning"
         @click="handleRunSimulation"
-        class="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg bg-[#1E3A8A] hover:bg-[#1D4ED8] disabled:bg-slate-400 text-white text-sm font-semibold shadow-sm transition-colors shrink-0"
+        class="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg bg-[#5B21B6] hover:bg-[#4C1D95] disabled:bg-slate-400 text-white text-sm font-semibold shadow-sm transition-colors shrink-0"
       >
         <Play class="w-4 h-4" />
         <span>
@@ -75,9 +75,9 @@ function openTracker(orderId) {
     <!-- Simulation Confirmation Banner -->
     <div
       v-if="lastSimulatedOrder"
-      class="p-4 rounded-xl bg-[#EFF6FF] border border-blue-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
+      class="p-4 rounded-xl bg-[#F5F3FF] border border-[#DDD6FE] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
     >
-      <div class="flex items-center gap-2.5 text-sm text-[#1E3A8A]">
+      <div class="flex items-center gap-2.5 text-sm text-[#5B21B6]">
         <CheckCircle2 class="w-5 h-5 shrink-0" />
         <span>
           Live demo order <strong>#ORD-{{ lastSimulatedOrder.id }}</strong> spawned. Watch the full ~35s picking, auto-dispatch, and GPS delivery animation in real time.
@@ -86,35 +86,35 @@ function openTracker(orderId) {
       <button
         type="button"
         @click="openTracker(lastSimulatedOrder.id)"
-        class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-blue-200 text-xs font-semibold text-[#1E3A8A] hover:bg-blue-50 shrink-0"
+        class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-[#DDD6FE] text-xs font-semibold text-[#5B21B6] hover:bg-[#EDE9FE] shrink-0"
       >
-        <span>Open Customer Tracker</span>
+        <span>View in Ops Queue</span>
         <ExternalLink class="w-3.5 h-3.5" />
       </button>
     </div>
 
     <!-- Fleet KPI Cards -->
     <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-      <div class="bg-white border border-[#E2E8F0] rounded-xl p-4">
+      <div class="bg-white border border-[#E9E5F5] rounded-xl p-4">
         <p class="text-xs font-medium text-[#475569]">Total Hub Riders</p>
         <p class="text-2xl font-bold text-[#0F172A] mt-1">{{ hubStore.riders.length }}</p>
       </div>
-      <div class="bg-white border border-[#E2E8F0] rounded-xl p-4">
+      <div class="bg-white border border-[#E9E5F5] rounded-xl p-4">
         <p class="text-xs font-medium text-[#475569]">Idle & Ready</p>
         <p class="text-2xl font-bold text-emerald-700 mt-1">{{ idleCount }}</p>
       </div>
-      <div class="bg-white border border-[#E2E8F0] rounded-xl p-4">
+      <div class="bg-white border border-[#E9E5F5] rounded-xl p-4">
         <p class="text-xs font-medium text-[#475569]">Assigned / Delivering</p>
-        <p class="text-2xl font-bold text-[#1D4ED8] mt-1">{{ activeCount }}</p>
+        <p class="text-2xl font-bold text-[#6D28D9] mt-1">{{ activeCount }}</p>
       </div>
     </div>
 
     <!-- Fleet Map + Live Rider Table -->
     <div class="grid grid-cols-1 lg:grid-cols-5 gap-6">
-      <div class="lg:col-span-3 bg-white border border-[#E2E8F0] rounded-xl p-4 space-y-3">
+      <div class="lg:col-span-3 bg-white border border-[#E9E5F5] rounded-xl p-4 space-y-3">
         <div class="flex items-center justify-between">
-          <h2 class="text-sm font-semibold text-[#0F172A] flex items-center gap-2">
-            <Navigation class="w-4 h-4 text-[#1E3A8A]" />
+          <h2 class="text-sm font-semibold text-[#1E1B4B] flex items-center gap-2">
+            <Navigation class="w-4 h-4 text-[#5B21B6]" />
             <span>Live Fleet Map ({{ hubStore.currentStore?.name }})</span>
           </h2>
           <span class="text-xs text-[#475569]">Real-time GPS markers</span>
@@ -127,23 +127,23 @@ function openTracker(orderId) {
         />
       </div>
 
-      <div class="lg:col-span-2 bg-white border border-[#E2E8F0] rounded-xl overflow-hidden flex flex-col">
-        <div class="px-4 py-3.5 border-b border-[#E2E8F0] flex items-center justify-between">
-          <h2 class="text-sm font-semibold text-[#0F172A]">Hub Rider Roster</h2>
+      <div class="lg:col-span-2 bg-white border border-[#E9E5F5] rounded-xl overflow-hidden flex flex-col">
+        <div class="px-4 py-3.5 border-b border-[#E9E5F5] flex items-center justify-between">
+          <h2 class="text-sm font-semibold text-[#1E1B4B]">Hub Rider Roster</h2>
           <span class="text-xs text-[#475569]">Live status</span>
         </div>
 
         <div class="overflow-x-auto flex-1">
           <table class="w-full text-left border-collapse">
             <thead>
-              <tr class="bg-[#F8FAFC] border-b border-[#E2E8F0] text-[11px] font-semibold uppercase tracking-wider text-[#475569]">
+              <tr class="bg-[#FAF8FF] border-b border-[#E9E5F5] text-[11px] font-semibold uppercase tracking-wider text-[#475569]">
                 <th class="px-4 py-2.5">Rider</th>
                 <th class="px-4 py-2.5">Status</th>
                 <th class="px-4 py-2.5">Assignment</th>
               </tr>
             </thead>
-            <tbody class="divide-y divide-[#E2E8F0] text-xs">
-              <tr v-for="rider in hubStore.riders" :key="rider.id" class="hover:bg-slate-50/70">
+            <tbody class="divide-y divide-[#E9E5F5] text-xs">
+              <tr v-for="rider in hubStore.riders" :key="rider.id" class="hover:bg-[#FAF8FF]">
                 <td class="px-4 py-3">
                   <p class="font-semibold text-[#0F172A]">{{ rider.name }}</p>
                   <p class="text-[11px] text-[#475569] flex items-center gap-1 mt-0.5">
@@ -164,7 +164,7 @@ function openTracker(orderId) {
                     <button
                       type="button"
                       @click="openTracker(assignedOrderForRider(rider.id).id)"
-                      class="font-semibold text-[#1D4ED8] hover:underline"
+                      class="font-semibold text-[#6D28D9] hover:underline"
                     >
                       #ORD-{{ assignedOrderForRider(rider.id).id }}
                     </button>

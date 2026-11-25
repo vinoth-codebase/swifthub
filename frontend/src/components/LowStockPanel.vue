@@ -21,11 +21,11 @@ async function handleRestock(item) {
 </script>
 
 <template>
-  <aside class="bg-white border border-[#E2E8F0] rounded-xl p-5 space-y-4">
+  <aside class="bg-white border border-[#E9E5F5] rounded-xl p-5 space-y-4">
     <div class="flex items-center justify-between gap-2">
       <div class="flex items-center gap-2">
         <AlertTriangle class="w-4 h-4 text-amber-600" />
-        <h2 class="text-sm font-semibold text-[#0F172A]">Low-Stock Reorder Alerts</h2>
+        <h2 class="text-sm font-semibold text-[#1E1B4B]">Low-Stock Reorder Alerts</h2>
       </div>
       <span
         class="text-xs font-semibold px-2 py-0.5 rounded-full border"
@@ -56,8 +56,8 @@ async function handleRestock(item) {
       <div
         v-for="item in sortedLowStock"
         :key="item.id"
-        class="p-3 rounded-lg border bg-[#F8FAFC] space-y-2.5"
-        :class="item.stock_available === 0 ? 'border-rose-200 bg-rose-50/40' : 'border-[#E2E8F0]'"
+        class="p-3 rounded-lg border bg-[#FAF8FF] space-y-2.5"
+        :class="item.stock_available === 0 ? 'border-rose-200 bg-rose-50/40' : 'border-[#E9E5F5]'"
       >
         <div class="flex items-start justify-between gap-2">
           <div class="min-w-0">
@@ -82,7 +82,7 @@ async function handleRestock(item) {
           type="button"
           :disabled="restockingId === item.product_id"
           @click="handleRestock(item)"
-          class="w-full inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-white hover:bg-[#EFF6FF] text-[#1E3A8A] border border-[#1E3A8A] disabled:opacity-50 text-xs font-semibold transition-colors"
+          class="w-full inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#F5F3FF]/50 hover:bg-[#6D28D9] hover:text-white text-[#6D28D9] border border-[#7C3AED] disabled:opacity-50 text-xs font-semibold transition-colors"
         >
           <PackagePlus class="w-3.5 h-3.5" />
           <span>{{ restockingId === item.product_id ? 'Restocking...' : 'Restock (+10)' }}</span>

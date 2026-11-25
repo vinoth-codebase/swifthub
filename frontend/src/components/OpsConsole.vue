@@ -88,13 +88,13 @@ async function advanceOrder(order) {
 <template>
   <div class="space-y-6">
     <!-- Header Banner -->
-    <div class="bg-white border border-[#E2E8F0] rounded-xl p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div class="bg-white border border-[#E9E5F5] rounded-xl p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
       <div class="flex items-start gap-3">
-        <div class="w-10 h-10 rounded-lg bg-[#EFF6FF] text-[#1E3A8A] flex items-center justify-center shrink-0">
+        <div class="w-10 h-10 rounded-lg bg-[#EDE9FE] text-[#5B21B6] flex items-center justify-center shrink-0">
           <ClipboardList class="w-5 h-5" />
         </div>
         <div>
-          <h1 class="text-lg font-semibold text-[#0F172A]">Dark-Store Picker & Hub Ops Console</h1>
+          <h1 class="text-lg font-semibold text-[#1E1B4B]">Dark-Store Picker & Hub Ops Console</h1>
           <p class="text-sm text-[#475569] mt-0.5">
             Queue automatically prioritized by highest ML SLA breach risk and lowest remaining window.
           </p>
@@ -102,10 +102,10 @@ async function advanceOrder(order) {
       </div>
 
       <div class="flex items-center gap-3 text-xs font-medium">
-        <span class="px-3 py-1.5 rounded-lg bg-[#F8FAFC] border border-[#E2E8F0] text-[#0F172A]">
+        <span class="px-3 py-1.5 rounded-lg bg-[#FAF8FF] border border-[#E9E5F5] text-[#0F172A]">
           Active Queue: {{ prioritizedQueue.length }}
         </span>
-        <span class="px-3 py-1.5 rounded-lg bg-[#F8FAFC] border border-[#E2E8F0] text-[#0F172A]">
+        <span class="px-3 py-1.5 rounded-lg bg-[#FAF8FF] border border-[#E9E5F5] text-[#0F172A]">
           Hub: {{ hubStore.currentStore?.name || 'All' }}
         </span>
       </div>
@@ -125,7 +125,7 @@ async function advanceOrder(order) {
       <div class="lg:col-span-2 space-y-4">
         <div
           v-if="prioritizedQueue.length === 0"
-          class="bg-white border border-[#E2E8F0] rounded-xl p-10 text-center text-sm text-[#475569]"
+          class="bg-white border border-[#E9E5F5] rounded-xl p-10 text-center text-sm text-[#475569]"
         >
           No active orders in the queue for {{ hubStore.currentStore?.name }}. Place an order in the Storefront or trigger a Live Demo Simulation.
         </div>
@@ -133,13 +133,13 @@ async function advanceOrder(order) {
         <article
           v-for="order in prioritizedQueue"
           :key="order.id"
-          class="bg-white border border-[#E2E8F0] rounded-xl p-5 space-y-4"
+          class="bg-white border border-[#E9E5F5] rounded-xl p-5 space-y-4"
         >
           <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div>
               <div class="flex items-center gap-2 flex-wrap">
-                <span class="text-sm font-bold text-[#0F172A]">#ORD-{{ order.id }}</span>
-                <span class="text-xs font-semibold px-2 py-0.5 rounded bg-slate-100 text-[#0F172A]">
+                <span class="text-sm font-bold text-[#1E1B4B]">#ORD-{{ order.id }}</span>
+                <span class="text-xs font-semibold px-2 py-0.5 rounded bg-[#F5F3FF] text-[#5B21B6]">
                   {{ order.status }}
                 </span>
                 <span
@@ -163,7 +163,7 @@ async function advanceOrder(order) {
                     ? 'bg-rose-50 text-rose-700 border-rose-200'
                     : getRemainingSlaSeconds(order.created_at, nowMs) < 180
                       ? 'bg-amber-50 text-amber-800 border-amber-200'
-                      : 'bg-[#EFF6FF] text-[#1E3A8A] border-blue-200'
+                      : 'bg-[#F5F3FF] text-[#5B21B6] border-[#DDD6FE]'
                 "
               >
                 <Clock class="w-3.5 h-3.5" />
@@ -175,7 +175,7 @@ async function advanceOrder(order) {
                 type="button"
                 :disabled="busyOrderId === order.id"
                 @click="advanceOrder(order)"
-                class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-[#1E3A8A] hover:bg-[#1D4ED8] disabled:bg-slate-300 text-white text-xs font-semibold transition-colors"
+                class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-[#5B21B6] hover:bg-[#4C1D95] disabled:bg-slate-300 text-white text-xs font-semibold transition-colors"
               >
                 <span>{{ nextActionFor(order.status).label }}</span>
                 <ArrowRight class="w-3.5 h-3.5" />
@@ -184,12 +184,12 @@ async function advanceOrder(order) {
           </div>
 
           <!-- Aisle-Sorted Pick List -->
-          <div class="border-t border-[#E2E8F0] pt-3">
+          <div class="border-t border-[#E9E5F5] pt-3">
             <div class="flex items-center justify-between mb-2">
               <span class="text-xs font-semibold uppercase tracking-wider text-[#475569]">
                 Aisle-Sorted Pick List ({{ order.items.length }} SKUs)
               </span>
-              <span v-if="order.rider_name" class="inline-flex items-center gap-1 text-xs font-medium text-[#1E3A8A]">
+              <span v-if="order.rider_name" class="inline-flex items-center gap-1 text-xs font-medium text-[#5B21B6]">
                 <Bike class="w-3.5 h-3.5" />
                 <span>Rider: {{ order.rider_name }}</span>
               </span>
@@ -205,7 +205,7 @@ async function advanceOrder(order) {
                 :class="
                   isPicked(order.id, item.id)
                     ? 'bg-emerald-50/70 border-emerald-200 text-emerald-900'
-                    : 'bg-[#F8FAFC] border-[#E2E8F0] hover:border-slate-300 text-[#0F172A]'
+                    : 'bg-[#FAF8FF] border-[#E9E5F5] hover:border-[#C4B5FD] text-[#0F172A]'
                 "
               >
                 <div class="flex items-center gap-2 min-w-0">

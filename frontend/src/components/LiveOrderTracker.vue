@@ -68,26 +68,27 @@ const canCancel = computed(() => {
   return ['PLACED', 'PICKING', 'PACKED'].includes(activeOrder.value.status)
 })
 
+const activeStore = computed(() => {
+  if (!activeOrder.value) return hubStore.currentStore
+  return hubStore.getStoreById(activeOrder.value.store_id) || hubStore.currentStore
+})
+
 async function handleCancel() {
   if (!activeOrder.value) return
-  await hubStore.advanceOrderStatus(
-    activeOrder.value.id,
-    'CANCELLED',
-    'Cancelled by customer prior to dispatch'
-  )
+  await hubStore.cancelMyOrder(activeOrder.value.id)
 }
 </script>
 
 <template>
   <section
     v-if="activeOrder"
-    class="bg-white border border-[#E2E8F0] rounded-xl p-5 space-y-5"
+    class="bg-white border border-[#E9E5F5] rounded-xl p-5 space-y-5"
   >
     <!-- Header Row -->
     <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
       <div class="space-y-1">
         <div class="flex items-center gap-2.5 flex-wrap">
-          <span class="text-xs font-semibold uppercase tracking-wider text-[#1E3A8A]">
+          <span class="text-xs font-semibold uppercase tracking-wider text-[#5B21B6]">
             Live Order Tracker
           </span>
           <span class="text-xs font-mono text-[#475569]">#ORD-{{ activeOrder.id }}</span>
@@ -104,7 +105,7 @@ async function handleCancel() {
             CANCELLED
           </span>
         </div>
-        <h2 class="text-base font-semibold text-[#0F172A]">
+        <h2 class="text-base font-semibold text-[#1E1B4B]">
           {{ activeOrder.customer_name }} &middot; {{ activeOrder.store_name }}
         </h2>
       </div>
@@ -113,7 +114,7 @@ async function handleCancel() {
         <select
           :value="activeOrder.id"
           @change="hubStore.trackedOrderId = Number($event.target.value)"
-          class="bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg px-3 py-1.5 text-xs font-medium text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-[#1D4ED8]"
+          class="bg-[#FAF8FF] border border-[#E9E5F5] rounded-lg px-3 py-1.5 text-xs font-medium text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-[#7C3AED]"
         >
           <option v-for="o in trackableOrders" :key="o.id" :value="o.id">
             #ORD-{{ o.id }} - {{ o.customer_name }} ({{ o.status }})
@@ -128,7 +129,7 @@ async function handleCancel() {
               ? 'bg-rose-50 text-rose-700 border-rose-200'
               : remainingSec < 180
                 ? 'bg-amber-50 text-amber-800 border-amber-200'
-                : 'bg-[#EFF6FF] text-[#1E3A8A] border-blue-200'
+                : 'bg-[#F5F3FF] text-[#5B21B6] border-[#DDD6FE]'
           "
         >
           <Clock class="w-4 h-4" />
@@ -157,14 +158,14 @@ async function handleCancel() {
         <div class="flex items-center w-full">
           <div
             class="h-1 flex-1 rounded-full"
-            :class="idx === 0 ? 'bg-transparent' : idx <= currentStepIdx ? 'bg-[#1D4ED8]' : 'bg-[#E2E8F0]'"
+            :class="idx === 0 ? 'bg-transparent' : idx <= currentStepIdx ? 'bg-[#7C3AED]' : 'bg-[#E9E5F5]'"
           />
           <div
             class="w-7 h-7 rounded-full flex items-center justify-center shrink-0 border"
             :class="
               idx <= currentStepIdx
-                ? 'bg-[#1E3A8A] text-white border-[#1E3A8A]'
-                : 'bg-white text-slate-400 border-[#E2E8F0]'
+                ? 'bg-[#5B21B6] text-white border-[#5B21B6]'
+                : 'bg-white text-slate-400 border-[#E9E5F5]'
             "
           >
             <CheckCircle2 v-if="idx <= currentStepIdx" class="w-4 h-4" />
@@ -172,12 +173,12 @@ async function handleCancel() {
           </div>
           <div
             class="h-1 flex-1 rounded-full"
-            :class="idx === ORDER_STEPS.length - 1 ? 'bg-transparent' : idx < currentStepIdx ? 'bg-[#1D4ED8]' : 'bg-[#E2E8F0]'"
+            :class="idx === ORDER_STEPS.length - 1 ? 'bg-transparent' : idx < currentStepIdx ? 'bg-[#7C3AED]' : 'bg-[#E9E5F5]'"
           />
         </div>
         <span
           class="mt-1.5 text-[11px] font-medium leading-tight"
-          :class="idx <= currentStepIdx ? 'text-[#0F172A]' : 'text-[#475569]'"
+          :class="idx <= currentStepIdx ? 'text-[#1E1B4B]' : 'text-[#475569]'"
         >
           {{ step.label }}
         </span>
@@ -189,13 +190,13 @@ async function handleCancel() {
       <!-- Left: ML Prediction & Audit Log -->
       <div class="space-y-3">
         <div class="grid grid-cols-2 gap-2.5">
-          <div class="p-3 rounded-lg bg-[#F8FAFC] border border-[#E2E8F0]">
+          <div class="p-3 rounded-lg bg-[#FAF8FF] border border-[#E9E5F5]">
             <p class="text-[11px] font-medium text-[#475569]">ML Predicted ETA</p>
             <p class="text-base font-bold text-[#0F172A] mt-0.5">
               {{ formatDuration(activeOrder.predicted_eta_sec) }}
             </p>
           </div>
-          <div class="p-3 rounded-lg bg-[#F8FAFC] border border-[#E2E8F0]">
+          <div class="p-3 rounded-lg bg-[#FAF8FF] border border-[#E9E5F5]">
             <p class="text-[11px] font-medium text-[#475569]">Order Total</p>
             <p class="text-base font-bold text-[#0F172A] mt-0.5">
               {{ formatCurrencyInr(activeOrder.total_inr) }}
@@ -203,9 +204,9 @@ async function handleCancel() {
           </div>
         </div>
 
-        <div class="p-3 rounded-lg bg-[#F8FAFC] border border-[#E2E8F0] flex items-center justify-between">
+        <div class="p-3 rounded-lg bg-[#FAF8FF] border border-[#E9E5F5] flex items-center justify-between">
           <div class="flex items-center gap-2">
-            <Bike class="w-4 h-4 text-[#1E3A8A]" />
+            <Bike class="w-4 h-4 text-[#5B21B6]" />
             <span class="text-xs font-medium text-[#475569]">Assigned Rider</span>
           </div>
           <span class="text-xs font-semibold text-[#0F172A]">
@@ -213,9 +214,9 @@ async function handleCancel() {
           </span>
         </div>
 
-        <div class="p-3 rounded-lg bg-[#F8FAFC] border border-[#E2E8F0]">
+        <div class="p-3 rounded-lg bg-[#FAF8FF] border border-[#E9E5F5]">
           <div class="flex items-center gap-1.5 text-xs font-semibold text-[#0F172A] mb-2">
-            <Activity class="w-3.5 h-3.5 text-[#1E3A8A]" />
+            <Activity class="w-3.5 h-3.5 text-[#5B21B6]" />
             <span>Status Audit Log</span>
           </div>
           <ul class="space-y-1.5 max-h-36 overflow-y-auto">
@@ -234,7 +235,7 @@ async function handleCancel() {
       <!-- Right: Live Leaflet Dispatch Map -->
       <div class="lg:col-span-2">
         <LiveDispatchMap
-          :store="hubStore.currentStore"
+          :store="activeStore"
           :order="activeOrder"
           :riders="hubStore.riders"
           height-class="h-72"

@@ -1,3 +1,25 @@
+const TOKEN_STORAGE_KEY = 'swifthub_auth_token'
+
+export function getStoredToken() {
+  try {
+    return localStorage.getItem(TOKEN_STORAGE_KEY) || ''
+  } catch {
+    return ''
+  }
+}
+
+export function setStoredToken(token) {
+  try {
+    if (token) {
+      localStorage.setItem(TOKEN_STORAGE_KEY, token)
+    } else {
+      localStorage.removeItem(TOKEN_STORAGE_KEY)
+    }
+  } catch {
+    // ignore storage errors in non-browser test environments
+  }
+}
+
 export function getApiBaseUrl() {
   const configured = import.meta.env.VITE_API_URL
   if (configured && configured.trim()) {
@@ -16,12 +38,18 @@ export function getWsUrl() {
 
 async function request(path, options = {}) {
   const url = `${getApiBaseUrl()}${path}`
+  const token = getStoredToken()
+  const headers = {
+    'Content-Type': 'application/json',
+    ...(options.headers || {}),
+  }
+  if (token && !headers.Authorization) {
+    headers.Authorization = `Bearer ${token}`
+  }
+
   const response = await fetch(url, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...(options.headers || {}),
-    },
     ...options,
+    headers,
   })
 
   if (!response.ok) {
@@ -43,6 +71,20 @@ async function request(path, options = {}) {
 }
 
 export const api = {
+  // Auth
+  register: (payload) =>
+    request('/api/auth/register', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  login: (payload) =>
+    request('/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  fetchMe: () => request('/api/auth/me'),
+
+  // Public storefront & inventory
   fetchStores: () => request('/api/stores'),
   fetchInventory: (storeId, params = {}) => {
     const query = new URLSearchParams()
@@ -52,6 +94,8 @@ export const api = {
     const suffix = query.toString() ? `?${query.toString()}` : ''
     return request(`/api/stores/${storeId}/inventory${suffix}`)
   },
+
+  // Orders (role-scoped)
   fetchOrders: (storeId = null) => {
     const suffix = storeId ? `?store_id=${storeId}` : ''
     return request(`/api/orders${suffix}`)
@@ -62,6 +106,12 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(payload),
     }),
+  cancelOrder: (orderId) =>
+    request(`/api/orders/${orderId}/cancel`, {
+      method: 'POST',
+    }),
+
+  // Branch Admin endpoints
   updateOrderStatus: (orderId, status, note = null) =>
     request(`/api/orders/${orderId}/status`, {
       method: 'PATCH',

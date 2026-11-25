@@ -1,26 +1,45 @@
 # SwiftHub: Dark-Store Inventory & 10-Minute Dispatch Engine
 
-SwiftHub is a full-stack hyperlocal quick-commerce dark-store inventory and 10-minute dispatch engine inspired by real-world 10-minute delivery hubs in Bangalore (Koramangala Hub, Indiranagar Hub, and HSR Layout Hub).
+SwiftHub is a full-stack hyperlocal quick-commerce dark-store inventory and 10-minute dispatch engine with JWT role-based access control (Customer vs. Branch Admin) and strict tenant isolation across two Bangalore dark-store hubs (**HSR Layout Hub** and **Koramangala Hub**).
 
 > **Non-Commercial Disclaimer:** SwiftHub is a non-commercial technical portfolio project using simulated operational data, synthetic historical orders, and simulated rider telemetry.
+
+---
+
+## Live Demo Access
+
+Use the pre-configured demo accounts below to test both the Customer Storefront and the isolated Branch Admin consoles.
+
+| Role | Assigned Hub | Email | Password |
+| :--- | :--- | :--- | :--- |
+| Customer | Any (Browse Both) | `aarav.demo@gmail.com` | `Customer123!` |
+| Customer | Any (Browse Both) | `priya.demo@gmail.com` | `Customer123!` |
+| Branch Admin | HSR Layout Hub | `hsr.admin@swifthub.com` | `AdminHSR123!` |
+| Branch Admin | Koramangala Hub | `koramangala.admin@swifthub.com` | `AdminKora123!` |
+
+**Recommended Evaluation Flow:**
+1. Sign in as a **Customer** (`aarav.demo@gmail.com`) in one browser window, select **HSR Layout Hub**, and place an order.
+2. Sign in as the **HSR Layout Hub Admin** (`hsr.admin@swifthub.com`) in an incognito window to see the live incoming order, pick/pack items, dispatch a rider, and view branch-isolated analytics.
+3. Sign in as the **Koramangala Hub Admin** (`koramangala.admin@swifthub.com`) to verify strict tenant isolation—HSR Layout orders, inventory, and riders are not visible or accessible from this account.
 
 ---
 
 ## Key Capabilities
 
 1. **Customer Storefront & Live Order Tracker**
-   - Multi-hub selector across Bangalore dark stores with live WebSocket-synced stock counts, aisle tags (`A1-Dairy` through `A6-Pantry`), and low-stock badges.
+   - Two-hub selector (**HSR Layout Hub** and **Koramangala Hub**) with an 18-product catalog featuring local product photography, clean consumer pricing (`INR`), and conditional low-stock / out-of-stock badges.
    - Slide-over cart drawer with atomic checkout reservation and clear conflict messaging (`HTTP 409 Conflict`) when concurrent buyers compete for the last unit.
-   - Live 5-step order timeline, 10-minute SLA countdown clock, ML-predicted ETA & SLA breach risk badge, and interactive Leaflet.js map tracking the dark-store hub, customer drop-off pin, and moving rider marker.
-2. **Dark-Store Ops Console (Picker & Hub Manager)**
+   - Authenticated **My Orders** view with a live 5-step order timeline, 10-minute SLA countdown clock, ML-predicted ETA & SLA breach risk badge, and keyless OpenStreetMap Leaflet.js live map.
+2. **Dark-Store Ops Console (Branch Admin Only)**
+   - Strictly isolated per branch (`current_user.store_id`) with a locked header badge (`Managed Hub: ...`).
    - Live incoming order queue automatically sorted by highest ML SLA breach risk and lowest remaining SLA time.
-   - Aisle-sorted interactive pick list per order with strict backend-enforced status advancement (`Start Picking` -> `Mark Packed` -> `Dispatch Rider` -> `Mark Delivered`).
-   - Low-stock reorder alert sidebar highlighting SKUs at or below `reorder_threshold` with one-click `Restock (+10)` replenishment.
-3. **Rider Dispatch Panel & Live Demo Simulator**
-   - Live hub rider roster (`IDLE`, `ASSIGNED`, `DELIVERING`), assigned orders, and fleet-wide Leaflet map.
-   - One-click **Run Live Demo Simulation** (`POST /api/simulation/trigger`) that places a real order and animates the complete picking, nearest-rider auto-assignment, and GPS delivery lifecycle over ~35 seconds.
-4. **Operations Analytics Dashboard**
-   - Chart.js visualizations computed directly from the append-only `order_events` audit table: 10-minute SLA compliance rate, average picking vs. dispatch wait vs. delivery latency, and order volume by category.
+   - Aisle-sorted interactive pick list (showing internal SKUs and aisle codes exclusively to pickers/admins) with strict backend-enforced status advancement (`Start Picking` -> `Mark Packed` -> `Dispatch Rider` -> `Mark Delivered`).
+   - Low-stock reorder alert sidebar with one-click `Restock (+10)` replenishment.
+3. **Rider Dispatch Panel & Live Demo Simulator (Branch Admin Only)**
+   - Branch-scoped rider roster (`IDLE`, `ASSIGNED`, `DELIVERING`), assigned orders, and fleet-wide OpenStreetMap Leaflet map.
+   - One-click **Run Live Demo Simulation** (`POST /api/simulation/trigger`) that places a real order in the admin's assigned hub and animates the complete picking, nearest-rider auto-assignment, and GPS delivery lifecycle over ~35 seconds.
+4. **Operations Analytics Dashboard (Branch Admin Only)**
+   - Chart.js visualizations computed directly from the branch's append-only `order_events` audit table: 10-minute SLA compliance rate, average picking vs. dispatch wait vs. delivery latency, and order volume by category.
 
 ---
 

@@ -74,11 +74,27 @@ class Rider(Base):
     orders = relationship("Order", back_populates="rider")
 
 
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String(255), unique=True, nullable=False, index=True)
+    full_name = Column(String(120), nullable=False)
+    password_hash = Column(String(255), nullable=False)
+    role = Column(String(32), nullable=False, default="CUSTOMER", index=True)
+    store_id = Column(Integer, ForeignKey("stores.id"), nullable=True, index=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=utcnow)
+
+    store = relationship("Store")
+    orders = relationship("Order", back_populates="customer")
+
+
 class Order(Base):
     __tablename__ = "orders"
 
     id = Column(Integer, primary_key=True, index=True)
     store_id = Column(Integer, ForeignKey("stores.id"), nullable=False, index=True)
+    customer_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     customer_name = Column(String(120), nullable=False)
     delivery_lat = Column(Float, nullable=False)
     delivery_lng = Column(Float, nullable=False)
@@ -89,6 +105,7 @@ class Order(Base):
     rider_id = Column(Integer, ForeignKey("riders.id"), nullable=True, index=True)
 
     store = relationship("Store", back_populates="orders")
+    customer = relationship("User", back_populates="orders")
     rider = relationship("Rider", back_populates="orders")
     items = relationship("OrderItem", back_populates="order", cascade="all, delete-orphan")
     events = relationship(

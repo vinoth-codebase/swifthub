@@ -74,10 +74,37 @@ class OrderEventOut(BaseModel):
     note: Optional[str] = None
 
 
+class RegisterIn(BaseModel):
+    full_name: str = Field(..., min_length=1, max_length=120)
+    email: str = Field(..., min_length=5, max_length=255)
+    password: str = Field(..., min_length=6, max_length=128)
+
+
+class LoginIn(BaseModel):
+    email: str = Field(..., min_length=3, max_length=255)
+    password: str = Field(..., min_length=1, max_length=128)
+
+
+class UserOut(BaseModel):
+    id: int
+    email: str
+    full_name: str
+    role: str
+    store_id: Optional[int] = None
+    store_name: Optional[str] = None
+
+
+class AuthTokenOut(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user: UserOut
+
+
 class OrderOut(BaseModel):
     id: int
     store_id: int
     store_name: str
+    customer_id: Optional[int] = None
     customer_name: str
     delivery_lat: float
     delivery_lng: float
@@ -87,6 +114,9 @@ class OrderOut(BaseModel):
     sla_risk_score: float
     rider_id: Optional[int] = None
     rider_name: Optional[str] = None
+    rider_status: Optional[str] = None
+    rider_lat: Optional[float] = None
+    rider_lng: Optional[float] = None
     total_inr: float
     items: List[OrderItemOut]
     events: List[OrderEventOut]

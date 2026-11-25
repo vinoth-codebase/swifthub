@@ -2,23 +2,38 @@ import asyncio
 from contextlib import asynccontextmanager
 from typing import List, Optional
 
-from fastapi import Depends, FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import Depends, FastAPI, HTTPException, WebSocket, WebSocketDisconnect, status
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session, joinedload
 
+from app.auth import (
+    ROLE_BRANCH_ADMIN,
+    ROLE_CUSTOMER,
+    create_access_token,
+    get_current_user,
+    get_optional_user,
+    hash_password,
+    require_branch_admin,
+    require_customer,
+    verify_password,
+)
 from app.config import settings
 from app.database import Base, SessionLocal, engine, get_db
-from app.models import Order, OrderEvent, OrderItem, Rider, Store, StoreInventory
+from app.models import Order, OrderEvent, OrderItem, Rider, Store, StoreInventory, User
 from app.schemas import (
+    AuthTokenOut,
     InventoryItemOut,
+    LoginIn,
     OrderCreateIn,
     OrderItemOut,
     OrderOut,
     OrderStatusUpdateIn,
+    RegisterIn,
     RestockIn,
     RiderOut,
     SimulationTriggerIn,
     StoreOut,
+    UserOut,
 )
 from app.seed import seed_database
 from app.services.inventory import (
@@ -30,6 +45,17 @@ from app.services.ml_inference import haversine_km, sla_predictor
 from app.services.simulator import create_simulated_order, run_order_lifecycle_simulation
 from app.services.state_machine import transition_order_status
 from app.ws import ws_manager
+
+
+def serialize_user(user: User) -> UserOut:
+    return UserOut(
+        id=user.id,
+        email=user.email,
+        full_name=user.full_name,
+        role=user.role,
+        store_id=user.store_id,
+        store_name=user.store.name if user.store else None,
+    )
 
 
 def serialize_inventory(inv: StoreInventory) -> InventoryItemOut:
@@ -68,6 +94,7 @@ def serialize_order(order: Order) -> OrderOut:
         id=order.id,
         store_id=order.store_id,
         store_name=order.store.name if order.store else "",
+        customer_id=order.customer_id,
         customer_name=order.customer_name,
         delivery_lat=order.delivery_lat,
         delivery_lng=order.delivery_lng,
@@ -77,10 +104,35 @@ def serialize_order(order: Order) -> OrderOut:
         sla_risk_score=order.sla_risk_score,
         rider_id=order.rider_id,
         rider_name=order.rider.name if order.rider else None,
+        rider_status=order.rider.status if order.rider else None,
+        rider_lat=order.rider.current_lat if order.rider else None,
+        rider_lng=order.rider.current_lng if order.rider else None,
         total_inr=total_inr,
         items=items_out,
         events=order.events,
     )
+
+
+def _load_order(db: Session, order_id: int) -> Optional[Order]:
+    return (
+        db.query(Order)
+        .options(
+            joinedload(Order.store),
+            joinedload(Order.rider),
+            joinedload(Order.items).joinedload(OrderItem.product),
+            joinedload(Order.events),
+        )
+        .filter(Order.id == order_id)
+        .first()
+    )
+
+
+def _assert_admin_store_access(admin: User, store_id: int) -> None:
+    if admin.store_id != store_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: you are restricted to your assigned dark-store branch.",
+        )
 
 
 @asynccontextmanager
@@ -97,7 +149,7 @@ async def lifespan(_app: FastAPI):
 
 app = FastAPI(
     title="SwiftHub Dark-Store & 10-Minute Dispatch API",
-    version="1.0.0",
+    version="2.0.0",
     lifespan=lifespan,
 )
 
@@ -131,6 +183,63 @@ def get_ml_metrics():
     }
 
 
+# ---------------------------------------------------------------------------
+# Authentication Routes
+# ---------------------------------------------------------------------------
+
+@app.post("/api/auth/register", response_model=AuthTokenOut, status_code=201)
+def register_customer(payload: RegisterIn, db: Session = Depends(get_db)):
+    normalized_email = payload.email.strip().lower()
+    if "@" not in normalized_email or "." not in normalized_email.split("@")[-1]:
+        raise HTTPException(status_code=400, detail="Please enter a valid email address.")
+
+    existing = db.query(User).filter(User.email == normalized_email).first()
+    if existing:
+        raise HTTPException(status_code=409, detail="An account with this email already exists.")
+
+    user = User(
+        email=normalized_email,
+        full_name=payload.full_name.strip(),
+        password_hash=hash_password(payload.password),
+        role=ROLE_CUSTOMER,
+        store_id=None,
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+
+    token = create_access_token(user)
+    return AuthTokenOut(access_token=token, user=serialize_user(user))
+
+
+@app.post("/api/auth/login", response_model=AuthTokenOut)
+def login_user(payload: LoginIn, db: Session = Depends(get_db)):
+    normalized_email = payload.email.strip().lower()
+    user = (
+        db.query(User)
+        .options(joinedload(User.store))
+        .filter(User.email == normalized_email)
+        .first()
+    )
+    if not user or not verify_password(payload.password, user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid email or password.",
+        )
+
+    token = create_access_token(user)
+    return AuthTokenOut(access_token=token, user=serialize_user(user))
+
+
+@app.get("/api/auth/me", response_model=UserOut)
+def get_me(current_user: User = Depends(get_current_user)):
+    return serialize_user(current_user)
+
+
+# ---------------------------------------------------------------------------
+# Public Storefront & Branch-Isolated Inventory Routes
+# ---------------------------------------------------------------------------
+
 @app.get("/api/stores", response_model=List[StoreOut])
 def list_stores(db: Session = Depends(get_db)):
     return db.query(Store).order_by(Store.id.asc()).all()
@@ -142,18 +251,22 @@ def list_store_inventory(
     category: Optional[str] = None,
     q: Optional[str] = None,
     low_stock_only: bool = False,
+    current_user: Optional[User] = Depends(get_optional_user),
     db: Session = Depends(get_db),
 ):
+    if current_user is not None and current_user.role == ROLE_BRANCH_ADMIN:
+        _assert_admin_store_access(current_user, store_id)
+
     store = db.query(Store).filter(Store.id == store_id).first()
     if not store:
         raise HTTPException(status_code=404, detail="Store not found")
 
-    query = (
+    items = (
         db.query(StoreInventory)
         .options(joinedload(StoreInventory.product))
         .filter(StoreInventory.store_id == store_id)
+        .all()
     )
-    items = query.all()
     results = []
     for inv in items:
         if category and category.lower() != "all" and inv.product.category.lower() != category.lower():
@@ -174,57 +287,111 @@ def list_store_inventory(
     return results
 
 
-@app.get("/api/riders", response_model=List[RiderOut])
-def list_riders(store_id: Optional[int] = None, db: Session = Depends(get_db)):
-    query = db.query(Rider)
-    if store_id is not None:
-        query = query.filter(Rider.store_id == store_id)
-    return query.order_by(Rider.id.asc()).all()
+@app.post("/api/stores/{store_id}/inventory/{product_id}/restock", response_model=InventoryItemOut)
+async def restock_inventory(
+    store_id: int,
+    product_id: int,
+    payload: RestockIn,
+    current_user: User = Depends(require_branch_admin),
+    db: Session = Depends(get_db),
+):
+    _assert_admin_store_access(current_user, store_id)
+    inv = restock_inventory_atomic(db, store_id, product_id, payload.quantity)
+    inv_loaded = (
+        db.query(StoreInventory)
+        .options(joinedload(StoreInventory.product))
+        .filter(StoreInventory.id == inv.id)
+        .first()
+    )
+    inv_out = serialize_inventory(inv_loaded)
+    await ws_manager.broadcast(
+        "INVENTORY_UPDATED",
+        {"store_id": store_id, "item": inv_out.model_dump(mode="json")},
+    )
+    return inv_out
 
+
+# ---------------------------------------------------------------------------
+# Branch-Isolated Rider Dispatch Routes (Admin Only)
+# ---------------------------------------------------------------------------
+
+@app.get("/api/riders", response_model=List[RiderOut])
+def list_riders(
+    store_id: Optional[int] = None,
+    current_user: User = Depends(require_branch_admin),
+    db: Session = Depends(get_db),
+):
+    if store_id is not None:
+        _assert_admin_store_access(current_user, store_id)
+    return (
+        db.query(Rider)
+        .filter(Rider.store_id == current_user.store_id)
+        .order_by(Rider.id.asc())
+        .all()
+    )
+
+
+# ---------------------------------------------------------------------------
+# Orders Routes (Role-Scoped & Branch-Isolated)
+# ---------------------------------------------------------------------------
 
 @app.get("/api/orders", response_model=List[OrderOut])
 def list_orders(
     store_id: Optional[int] = None,
-    status: Optional[str] = None,
+    status_filter: Optional[str] = None,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    query = (
-        db.query(Order)
-        .options(
-            joinedload(Order.store),
-            joinedload(Order.rider),
-            joinedload(Order.items).joinedload(OrderItem.product),
-            joinedload(Order.events),
-        )
+    query = db.query(Order).options(
+        joinedload(Order.store),
+        joinedload(Order.rider),
+        joinedload(Order.items).joinedload(OrderItem.product),
+        joinedload(Order.events),
     )
-    if store_id is not None:
-        query = query.filter(Order.store_id == store_id)
-    if status:
-        query = query.filter(Order.status == status.upper())
+
+    if current_user.role == ROLE_BRANCH_ADMIN:
+        if store_id is not None:
+            _assert_admin_store_access(current_user, store_id)
+        query = query.filter(Order.store_id == current_user.store_id)
+    else:
+        query = query.filter(Order.customer_id == current_user.id)
+        if store_id is not None:
+            query = query.filter(Order.store_id == store_id)
+
+    if status_filter:
+        query = query.filter(Order.status == status_filter.upper())
+
     orders = query.order_by(Order.created_at.desc()).all()
     return [serialize_order(o) for o in orders]
 
 
 @app.get("/api/orders/{order_id}", response_model=OrderOut)
-def get_order(order_id: int, db: Session = Depends(get_db)):
-    order = (
-        db.query(Order)
-        .options(
-            joinedload(Order.store),
-            joinedload(Order.rider),
-            joinedload(Order.items).joinedload(OrderItem.product),
-            joinedload(Order.events),
-        )
-        .filter(Order.id == order_id)
-        .first()
-    )
+def get_order(
+    order_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    order = _load_order(db, order_id)
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
+
+    if current_user.role == ROLE_BRANCH_ADMIN:
+        _assert_admin_store_access(current_user, order.store_id)
+    elif order.customer_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: you can only view your own orders.",
+        )
+
     return serialize_order(order)
 
 
 @app.post("/api/orders", response_model=OrderOut, status_code=201)
-async def create_order(payload: OrderCreateIn, db: Session = Depends(get_db)):
+async def create_order(
+    payload: OrderCreateIn,
+    current_user: User = Depends(require_customer),
+    db: Session = Depends(get_db),
+):
     store = db.query(Store).filter(Store.id == payload.store_id).first()
     if not store:
         raise HTTPException(status_code=404, detail="Store not found")
@@ -262,6 +429,7 @@ async def create_order(payload: OrderCreateIn, db: Session = Depends(get_db)):
 
     order = Order(
         store_id=payload.store_id,
+        customer_id=current_user.id,
         customer_name=payload.customer_name.strip(),
         delivery_lat=payload.delivery_lat,
         delivery_lng=payload.delivery_lng,
@@ -293,41 +461,66 @@ async def create_order(payload: OrderCreateIn, db: Session = Depends(get_db)):
     )
     db.commit()
 
-    order_out = get_order(order.id, db)
+    loaded = _load_order(db, order.id)
+    order_out = serialize_order(loaded)
     await ws_manager.broadcast("ORDER_CREATED", order_out.model_dump(mode="json"))
     await ws_manager.broadcast("INVENTORY_UPDATED", {"store_id": payload.store_id})
     return order_out
 
 
-@app.post("/api/stores/{store_id}/inventory/{product_id}/restock", response_model=InventoryItemOut)
-async def restock_inventory(
-    store_id: int,
-    product_id: int,
-    payload: RestockIn,
+@app.post("/api/orders/{order_id}/cancel", response_model=OrderOut)
+async def cancel_customer_order(
+    order_id: int,
+    current_user: User = Depends(require_customer),
     db: Session = Depends(get_db),
 ):
-    inv = restock_inventory_atomic(db, store_id, product_id, payload.quantity)
-    inv_loaded = (
-        db.query(StoreInventory)
-        .options(joinedload(StoreInventory.product))
-        .filter(StoreInventory.id == inv.id)
-        .first()
+    order = db.query(Order).filter(Order.id == order_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    if order.customer_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: you can only cancel your own orders.",
+        )
+
+    transition_order_status(db, order_id, "CANCELLED", "Cancelled by customer prior to dispatch")
+    loaded = _load_order(db, order_id)
+    order_out = serialize_order(loaded)
+    await ws_manager.broadcast("ORDER_UPDATED", order_out.model_dump(mode="json"))
+    await ws_manager.broadcast("INVENTORY_UPDATED", {"store_id": order_out.store_id})
+    riders = db.query(Rider).filter(Rider.store_id == order_out.store_id).all()
+    await ws_manager.broadcast(
+        "RIDERS_UPDATED",
+        {
+            "store_id": order_out.store_id,
+            "riders": [RiderOut.model_validate(r).model_dump(mode="json") for r in riders],
+        },
     )
-    inv_out = serialize_inventory(inv_loaded)
-    await ws_manager.broadcast("INVENTORY_UPDATED", {"store_id": store_id, "item": inv_out.model_dump(mode="json")})
-    return inv_out
+    return order_out
 
 
 @app.patch("/api/orders/{order_id}/status", response_model=OrderOut)
 async def update_order_status(
     order_id: int,
     payload: OrderStatusUpdateIn,
+    current_user: User = Depends(require_branch_admin),
     db: Session = Depends(get_db),
 ):
+    order = db.query(Order).filter(Order.id == order_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    _assert_admin_store_access(current_user, order.store_id)
+
     transition_order_status(db, order_id, payload.status, payload.note)
-    order_out = get_order(order_id, db)
+    loaded = _load_order(db, order_id)
+    order_out = serialize_order(loaded)
     await ws_manager.broadcast("ORDER_UPDATED", order_out.model_dump(mode="json"))
-    if order_out.rider_id is not None or order_out.status in {"PACKED", "OUT_FOR_DELIVERY", "DELIVERED", "CANCELLED"}:
+    if order_out.rider_id is not None or order_out.status in {
+        "PACKED",
+        "OUT_FOR_DELIVERY",
+        "DELIVERED",
+        "CANCELLED",
+    }:
         riders = db.query(Rider).filter(Rider.store_id == order_out.store_id).all()
         await ws_manager.broadcast(
             "RIDERS_UPDATED",
@@ -341,18 +534,27 @@ async def update_order_status(
     return order_out
 
 
+# ---------------------------------------------------------------------------
+# Live Demo Simulation & Operations Analytics (Admin Only, Branch-Isolated)
+# ---------------------------------------------------------------------------
+
 @app.post("/api/simulation/trigger", response_model=OrderOut, status_code=201)
 async def trigger_simulation(
     payload: Optional[SimulationTriggerIn] = None,
+    current_user: User = Depends(require_branch_admin),
     db: Session = Depends(get_db),
 ):
-    store_id = payload.store_id if payload else None
+    if payload and payload.store_id is not None:
+        _assert_admin_store_access(current_user, payload.store_id)
+
+    target_store_id = current_user.store_id
     try:
-        order = create_simulated_order(db, store_id=store_id)
+        order = create_simulated_order(db, store_id=target_store_id)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
-    order_out = get_order(order.id, db)
+    loaded = _load_order(db, order.id)
+    order_out = serialize_order(loaded)
     await ws_manager.broadcast("ORDER_CREATED", order_out.model_dump(mode="json"))
     await ws_manager.broadcast("INVENTORY_UPDATED", {"store_id": order_out.store_id})
 
@@ -365,27 +567,24 @@ async def trigger_simulation(
     return order_out
 
 
-@app.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket):
-    await ws_manager.connect(websocket)
-    try:
-        while True:
-            await websocket.receive_text()
-    except WebSocketDisconnect:
-        ws_manager.disconnect(websocket)
-    except Exception:
-        ws_manager.disconnect(websocket)
-
-
 @app.get("/api/analytics")
-def get_analytics(store_id: Optional[int] = None, db: Session = Depends(get_db)):
-    query = db.query(Order).options(
-        joinedload(Order.items).joinedload(OrderItem.product),
-        joinedload(Order.events),
-    )
+def get_analytics(
+    store_id: Optional[int] = None,
+    current_user: User = Depends(require_branch_admin),
+    db: Session = Depends(get_db),
+):
     if store_id is not None:
-        query = query.filter(Order.store_id == store_id)
-    orders = query.all()
+        _assert_admin_store_access(current_user, store_id)
+
+    orders = (
+        db.query(Order)
+        .options(
+            joinedload(Order.items).joinedload(OrderItem.product),
+            joinedload(Order.events),
+        )
+        .filter(Order.store_id == current_user.store_id)
+        .all()
+    )
 
     total_orders = len(orders)
     delivered_orders = [o for o in orders if o.status == "DELIVERED"]
@@ -450,3 +649,15 @@ def get_analytics(store_id: Optional[int] = None, db: Session = Depends(get_db))
             for k, v in sorted(category_counts.items(), key=lambda x: x[1], reverse=True)
         ],
     }
+
+
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    await ws_manager.connect(websocket)
+    try:
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        ws_manager.disconnect(websocket)
+    except Exception:
+        ws_manager.disconnect(websocket)
